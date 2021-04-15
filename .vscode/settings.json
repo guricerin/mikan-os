@@ -1,0 +1,12 @@
+{
+    "workbench.editorAssociations": [
+        {
+            "viewType": "hexEditor.hexedit",
+            "filenamePattern": "*.efi"
+        },
+        {
+            "viewType": "hexEditor.hexedit",
+            "filenamePattern": "*.EFI"
+        }
+    ],
+}
