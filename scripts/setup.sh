@@ -10,3 +10,5 @@ ansible-playbook -K -i ansible_inventory ansible_provision.yml
 readonly SCRIPT_ROOT=$(cd $(dirname ${0}); pwd)
 cd $HOME/edk2
 ln -s $SCRIPT_ROOT/MikanLoaderPkg ./
+source edksetup.sh
+cp -f $SCRIPT_ROOT/edk2/Conf/target.txt Conf/

@@ -1,7 +1,7 @@
 # mikan-os
 
 [WIP]  
-[ゼロからのOS自作入門](https://zero.osdev.jp/)の写経
+[ゼロからのOS自作入門](https://zero.osdev.jp/)の写経  
 
 ## 開発環境
 
