@@ -204,8 +204,6 @@ void CopyLoadSegments(Elf64_Ehdr* ehdr) {
 }
 
 EFI_STATUS EFIAPI UefiMain(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE* system_table) {
-    Print(L"Hello, Mikan World!\n");
-
     // メモリマップ取得
     CHAR8 memmap_buf[4096 * 4]; // 16KiB
     MemoryMap memmap = {sizeof(memmap_buf), memmap_buf, 0, 0, 0, 0};
@@ -251,22 +249,6 @@ EFI_STATUS EFIAPI UefiMain(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE* system_tab
     if (EFI_ERROR(status)) {
         Print(L"failed to open GOP: %r\n", status);
         Halt();
-    }
-
-    Print(L"Resolution: %ux%u, Pixel Format: %s, %u pixels/line\n",
-          gop->Mode->Info->HorizontalResolution,
-          gop->Mode->Info->VerticalResolution,
-          GetPixelFormatUnicode(gop->Mode->Info->PixelFormat),
-          gop->Mode->Info->PixelsPerScanLine);
-    Print(L"Frame Buffer: 0x%0lx - 0x%0lx, Size: %lu bytes\n",
-          gop->Mode->FrameBufferBase,
-          gop->Mode->FrameBufferBase + gop->Mode->FrameBufferSize,
-          gop->Mode->FrameBufferSize);
-
-    // ピクセル描画
-    UINT8* frame_buffer = (UINT8*)gop->Mode->FrameBufferBase;
-    for (UINTN i = 0; i < gop->Mode->FrameBufferSize; i++) {
-        frame_buffer[i] = 255;
     }
 
     // カーネルファイルオープン
