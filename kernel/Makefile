@@ -5,7 +5,7 @@ LDFLAGS = -L$(DEVENV_PATH)/lib --entry KernelMain -z norelro --image-base 0x1000
 
 OUT_PATH = build
 TARGET = $(OUT_PATH)/kernel.elf
-OBJS = $(OUT_PATH)/main.o
+OBJS = $(OUT_PATH)/main.o $(OUT_PATH)/graphics.o $(OUT_PATH)/font.o
 
 .PHONY: default
 default: $(TARGET)
