@@ -4,7 +4,7 @@ set -eux
 readonly EDK2_PATH=$HOME/edk2
 readonly OSBOOK_DEVENV_PATH=$HOME/osbook/devenv
 readonly SCRIPT_ROOT=$(cd $(dirname ${0}); pwd)
-readonly KERNEL_PATH=$SCRIPT_ROOT/../kernel/build/kernel.elf
+readonly KERNEL_PATH=$SCRIPT_ROOT/../kernel/kernel.elf
 
 # 実行する前に以下のビルド作業を行うこと
 # $ cd $EDK2_PATH 

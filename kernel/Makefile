@@ -3,20 +3,24 @@ CPPFLAGS = -I$(DEVENV_PATH)/include/c++/v1 -I$(DEVENV_PATH)/include -I$(DEVENV_P
 CXXFLAGS = -Wall -g -O2 --target=x86_64-elf -ffreestanding -mno-red-zone -fno-exceptions -fno-rtti -std=c++17
 LDFLAGS = -L$(DEVENV_PATH)/lib --entry KernelMain -z norelro --image-base 0x100000 --static
 
-OUT_PATH = build
-TARGET = $(OUT_PATH)/kernel.elf
-OBJS = $(OUT_PATH)/main.o $(OUT_PATH)/graphics.o $(OUT_PATH)/font.o
+TARGET = kernel.elf
+OBJS = main.o graphics.o font.o hankaku.o
 
 .PHONY: default
 default: $(TARGET)
 
 .PHONY: clean
 clean:
-	rm -rf $(OUT_PATH)/*.o
+	rm -rf *.o *.bin
 
 $(TARGET): $(OBJS) Makefile
 	ld.lld $(LDFLAGS) -o $(TARGET) $(OBJS)
 
-$(OUT_PATH)/%.o: %.cpp Makefile
-	mkdir -p $(OUT_PATH)
+%.o: %.cpp Makefile
 	clang++ $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@
+
+hankaku.bin: hankaku.txt
+	../scripts/makefont.py -o $@ $<
+
+hankaku.o: hankaku.bin
+	objcopy -I binary -O elf64-x86-64 -B i386:x86-64 $< $@
