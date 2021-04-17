@@ -8,6 +8,7 @@
 - Windows10 Pro ver.2004
 - WSL2, Ubuntu 20.04
 - Qemu 4.2.1
+- VcXsrv 64.1.20.9.0
 
 ## セットアップ
 
