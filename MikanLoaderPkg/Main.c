@@ -1,3 +1,4 @@
+#include "frame_buffer_config.h"
 #include <Guid/FileInfo.h>
 #include <Library/MemoryAllocationLib.h>
 #include <Library/PrintLib.h>
@@ -290,7 +291,6 @@ EFI_STATUS EFIAPI UefiMain(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE* system_tab
     Print(L"Kernel: 0x%0lx (%lu bytes)\n", kernel_base_addr, kernel_file_size);
 
     // ブートサービス停止
-    EFI_STATUS status;
     status = gBS->ExitBootServices(image_handle, memmap.map_key);
     if (EFI_ERROR(status)) {
         status = GetMemoryMap(&memmap);
@@ -307,10 +307,27 @@ EFI_STATUS EFIAPI UefiMain(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE* system_tab
 
     // カーネル起動
     UINT64 entry_addr = *(UINT64*)(kernel_base_addr + 24);
+    FrameBufferConfig config = {
+        (UINT8*)gop->Mode->FrameBufferBase,
+        gop->Mode->Info->PixelsPerScanLine,
+        gop->Mode->Info->HorizontalResolution,
+        gop->Mode->Info->VerticalResolution,
+        0};
+    switch (gop->Mode->Info->PixelFormat) {
+    case PixelRedGreenBlueReserved8BitPerColor:
+        config.pixel_format = kPixelRGBResv8BitPerColor;
+        break;
+    case PixelBlueGreenRedReserved8BitPerColor:
+        config.pixel_format = kPixelBGRResv8BitPerColor;
+        break;
+    default:
+        Print(L"Unimplemented pixel format: %d\n", gop->Mode->Info->PixelFormat);
+        Halt();
+    }
     // エントリーポイントをC言語の関数として解釈させる
-    typedef void EntryPointType(UINT64, UINT64);
+    typedef void EntryPointType(const FrameBufferConfig*);
     EntryPointType* entry_point = (EntryPointType*)entry_addr;
-    entry_point(gop->Mode->FrameBufferBase, gop->Mode->FrameBufferSize);
+    entry_point(&config);
 
     Print(L"All done\n");
     while (1)
