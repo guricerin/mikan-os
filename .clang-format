@@ -23,8 +23,7 @@ AllowShortLoopsOnASingleLine : true
 AllowShortFunctionsOnASingleLine: All
 AllowShortIfStatementsOnASingleLine: true
 
-# 他のnamespaceに内包されたnamespace内の要素のみインデント
-NamespaceIndentation: Inner
+NamespaceIndentation: All
 
 # アクセス修飾子とclassのインデントを合わせる
 AccessModifierOffset: -4
