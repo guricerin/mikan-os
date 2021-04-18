@@ -15,7 +15,7 @@
 - 開発ツールのインストール
 
 ```bash
-$ ./scripts/setup.sh
+$ make setup
 ```
 
 - ``.bashrc``に以下を追記 (VcXsrvのための設定)

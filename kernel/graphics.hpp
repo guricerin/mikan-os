@@ -19,7 +19,7 @@ public:
 
 protected:
     uint8_t* PixelAt(int x, int y) {
-        // 1ピクセルは4バイト（rgbの24bit + 予約領域の8bit）
+        // 1ピクセルは4byte（rgbの24bit + 予約領域の8bit）
         return _config.frame_buffer + 4 * (_config.pixels_per_scan_line * y + x);
     }
 };
@@ -35,3 +35,12 @@ public:
     using PixelWriter::PixelWriter;
     virtual void Write(int x, int y, const PixelColor& color) override;
 };
+
+template <typename T>
+struct Vector2D {
+    T x, y;
+};
+
+void DrawRectangle(PixelWriter& writer, const Vector2D<int>& pos, const Vector2D<int>& size, const PixelColor& color);
+
+void FillRectangle(PixelWriter& writer, const Vector2D<int>& pos, const Vector2D<int>& size, const PixelColor& color);

@@ -109,7 +109,7 @@ EFI_STATUS SaveMemoryMap(MemoryMap* map, EFI_FILE_PROTOCOL* file) {
     len = AsciiStrLen(header);
     file->Write(file, &len, header);
 
-    Print(L"map->buffer = %08lx, map->map_size = %08lx\n", map->buffer, map->map_size);
+    // Print(L"map->buffer = %08lx, map->map_size = %08lx\n", map->buffer, map->map_size);
 
     EFI_PHYSICAL_ADDRESS iter;
     int i;
@@ -300,6 +300,7 @@ EFI_STATUS EFIAPI UefiMain(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE* system_tab
 
     // カーネルファイルをコピーする領域を確保
     // 単位をバイトからページ（4KiB(0x1000) / page）に変換
+    // + 0xfff は切り上げ処理
     UINTN num_pages = (kernel_last_addr - kernel_first_addr + 0xfff) / 0x1000;
     status = gBS->AllocatePages(AllocateAddress, EfiLoaderData, num_pages, &kernel_first_addr);
     if (EFI_ERROR(status)) {
@@ -308,7 +309,7 @@ EFI_STATUS EFIAPI UefiMain(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE* system_tab
     }
     // 一時領域から最終目的地（ld.lldの--image-baseで指定されたアドレス）へコピー
     CopyLoadSegments(kernel_ehdr);
-    Print(L"Kernel: 0x%0lx - 0x%0xlx\n", kernel_first_addr, kernel_last_addr);
+    // Print(L"Kernel: 0x%0lx - 0x%0xlx\n", kernel_first_addr, kernel_last_addr);
     status = gBS->FreePool(kernel_buffer);
     if (EFI_ERROR(status)) {
         Print(L"failed to free pool: %r\n", status);
