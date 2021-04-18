@@ -1,8 +1,10 @@
+#include <cstddef>
+#include <cstdint>
+#include <cstdio>
+
 #include "../MikanLoaderPkg/frame_buffer_config.h"
 #include "font.hpp"
 #include "graphics.hpp"
-#include <cstddef>
-#include <cstdint>
 
 /** 配置new
  * この時点のカーネルにはメモリ管理機能がないので普通のnewは使えない
@@ -46,6 +48,11 @@ extern "C" void KernelMain(const FrameBufferConfig& frame_buffer_config) {
     for (char c = '!'; c <= '~'; i++, c++) {
         WriteAscii(*g_pixel_writer, 8 * i, 50, c, {0, 0, 0});
     }
+    WriteString(*g_pixel_writer, 0, 66, "Hello, world!", {0, 0, 255});
+
+    char buf[128];
+    sprintf(buf, "1 + 2 = %d", 1 + 2);
+    WriteString(*g_pixel_writer, 0, 82, buf, {0, 0, 0});
 
     while (1) {
         // CPU停止
