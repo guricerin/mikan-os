@@ -5,7 +5,7 @@ CFLAGS = -Wall -g -O2 --target=x86_64-elf -ffreestanding -mno-red-zone
 LDFLAGS = -L$(DEVENV_PATH)/lib --entry KernelMain -z norelro --image-base 0x100000 --static
 
 TARGET = kernel.elf
-OBJS = main.o graphics.o font.o hankaku.o newlib_support.o
+OBJS = main.o graphics.o font.o hankaku.o newlib_support.o console.o
 
 .PHONY: default
 default: $(TARGET)

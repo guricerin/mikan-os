@@ -3,6 +3,7 @@
 #include <cstdio>
 
 #include "../MikanLoaderPkg/frame_buffer_config.h"
+#include "console.hpp"
 #include "font.hpp"
 #include "graphics.hpp"
 
@@ -37,22 +38,14 @@ extern "C" void KernelMain(const FrameBufferConfig& frame_buffer_config) {
             g_pixel_writer->Write(x, y, {255, 255, 255});
         }
     }
-    // 一部を緑にする
-    for (int x = 0; x < 200; x++) {
-        for (int y = 0; y < 100; y++) {
-            g_pixel_writer->Write(x, y, {0, 255, 0});
-        }
-    }
 
-    int i = 0;
-    for (char c = '!'; c <= '~'; i++, c++) {
-        WriteAscii(*g_pixel_writer, 8 * i, 50, c, {0, 0, 0});
-    }
-    WriteString(*g_pixel_writer, 0, 66, "Hello, world!", {0, 0, 255});
+    Console console{*g_pixel_writer, {0, 0, 0}, {255, 255, 255}};
 
     char buf[128];
-    sprintf(buf, "1 + 2 = %d", 1 + 2);
-    WriteString(*g_pixel_writer, 0, 82, buf, {0, 0, 0});
+    for (int i = 0; i < 27; i++) {
+        sprintf(buf, "line: %d\n", i);
+        console.PutString(buf);
+    }
 
     while (1) {
         // CPU停止
