@@ -20,6 +20,20 @@ void operator delete(void* obj) noexcept {
 char g_pixel_writer_buf[sizeof(RGBResv8BitPerColorPixelWriter)];
 PixelWriter* g_pixel_writer;
 
+char g_console_buf[sizeof(Console)];
+Console* g_console;
+
+int printk(const char* format, ...) {
+    va_list ap;
+    va_start(ap, format);
+    char s[1024];
+    int result = vsprintf(s, format, ap);
+    va_end(ap);
+
+    g_console->PutString(s);
+    return result;
+}
+
 // ブートローダからフレームバッファの情報を受け取る
 extern "C" void KernelMain(const FrameBufferConfig& frame_buffer_config) {
     switch (frame_buffer_config.pixel_format) {
@@ -33,18 +47,15 @@ extern "C" void KernelMain(const FrameBufferConfig& frame_buffer_config) {
 
     // ピクセル描画
     // 画面全体を白くする
-    for (int x = 0; x < frame_buffer_config.horizontal_resolution; x++) {
-        for (int y = 0; y < frame_buffer_config.vertical_resolution; y++) {
-            g_pixel_writer->Write(x, y, {255, 255, 255});
-        }
-    }
+    // for (int x = 0; x < frame_buffer_config.horizontal_resolution; x++) {
+    //     for (int y = 0; y < frame_buffer_config.vertical_resolution; y++) {
+    //         g_pixel_writer->Write(x, y, {255, 255, 255});
+    //     }
+    // }
 
-    Console console{*g_pixel_writer, {0, 0, 0}, {255, 255, 255}};
-
-    char buf[128];
+    g_console = new (g_console_buf) Console{*g_pixel_writer, {0, 0, 0}, {255, 255, 255}};
     for (int i = 0; i < 27; i++) {
-        sprintf(buf, "line: %d\n", i);
-        console.PutString(buf);
+        printk("printk: %d\n", i);
     }
 
     while (1) {
