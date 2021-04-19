@@ -5,7 +5,7 @@ CFLAGS = -Wall -g -O2 --target=x86_64-elf -ffreestanding -mno-red-zone
 LDFLAGS = -L$(DEVENV_PATH)/lib --entry KernelMain -z norelro --image-base 0x100000 --static
 
 TARGET = kernel.elf
-OBJS = main.o graphics.o font.o hankaku.o newlib_support.o console.o
+OBJS = main.o graphics.o font.o hankaku.o newlib_support.o console.o pci.o asmfunc.o
 
 .PHONY: default
 default: $(TARGET)
@@ -22,6 +22,9 @@ $(TARGET): $(OBJS) Makefile
 
 %.o: %.c Makefile
 	clang $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+%.o: %.asm Makefile
+	nasm -f elf64 -o $@ $<
 
 hankaku.bin: hankaku.txt
 	../scripts/makefont.py -o $@ $<

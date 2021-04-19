@@ -6,13 +6,7 @@
 #include "console.hpp"
 #include "font.hpp"
 #include "graphics.hpp"
-
-/** 配置new
- * この時点のカーネルにはメモリ管理機能がないので普通のnewは使えない
-*/
-void* operator new(size_t size, void* buf) {
-    return buf;
-}
+#include "pci.hpp"
 
 void operator delete(void* obj) noexcept {
 }
@@ -100,6 +94,17 @@ extern "C" void KernelMain(const FrameBufferConfig& frame_buffer_config) {
                 g_pixel_writer->Write(200 + dx, 100 + dy, {255, 255, 255});
             }
         }
+    }
+
+    // PCIデバイスを列挙
+    auto err = pci::ScanAllBus();
+    printk("ScanAllBus: %d\n", err.Name());
+    for (int i = 0; i < pci::g_num_device; i++) {
+        const auto& device = pci::g_devices[i];
+        auto vendor_id = pci::ReadVendorId(device.bus, device.device, device.function);
+        auto class_code = pci::ReadClassCode(device.bus, device.device, device.function);
+        printk("%d.%d.%d: vend %04x, class %08x, head %02x\n",
+               device.bus, device.device, device.function, vendor_id, class_code, device.header_type);
     }
 
     while (1) {

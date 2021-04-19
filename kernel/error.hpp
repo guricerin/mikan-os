@@ -17,7 +17,7 @@ public:
         return this->_code != ErrorCode::Success;
     }
 
-    const char* name() const {
+    const char* Name() const {
         return _code_names[static_cast<int>(this->_code)];
     }
 

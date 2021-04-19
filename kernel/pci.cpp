@@ -93,4 +93,62 @@ namespace pci {
     void WriteAddress(uint32_t address) {
         IoOut32(CONFIG_ADDRESS, address);
     }
+
+    void WriteData(uint32_t value) {
+        IoOut32(CONFIG_DATA, value);
+    }
+
+    uint32_t ReadData() {
+        return IoIn32(CONFIG_DATA);
+    }
+
+    uint16_t ReadVendorId(uint8_t bus, uint8_t device, uint8_t function) {
+        WriteAddress(MakeAddress(bus, device, function, 0x00));
+        return ReadData() & 0xffffu;
+    }
+
+    uint16_t ReadDeviceId(uint8_t bus, uint8_t device, uint8_t function) {
+        WriteAddress(MakeAddress(bus, device, function, 0x00));
+        return ReadData() >> 16;
+    }
+
+    uint8_t ReadHeaderType(uint8_t bus, uint8_t device, uint8_t function) {
+        WriteAddress(MakeAddress(bus, device, function, 0x0c));
+        return (ReadData() >> 16) & 0xffu;
+    }
+
+    uint32_t ReadClassCode(uint8_t bus, uint8_t device, uint8_t function) {
+        WriteAddress(MakeAddress(bus, device, function, 0x08));
+        return ReadData();
+    }
+
+    uint32_t ReadBusNumbers(uint8_t bus, uint8_t device, uint8_t function) {
+        WriteAddress(MakeAddress(bus, device, function, 0x18));
+        return ReadData();
+    }
+
+    bool IsSingleFunctionDevice(uint8_t header_type) {
+        return (header_type & 0x80u) == 0;
+    }
+
+    Error ScanAllBus() {
+        g_num_device = 0;
+
+        // バス0, デバイス0はホストブリッジ（CPUとPCIデバイス間の通信を橋渡しする）
+        auto header_type = ReadHeaderType(0, 0, 0);
+        if (IsSingleFunctionDevice(header_type)) {
+            return ScanBus(0);
+        }
+
+        for (uint8_t function = 1; function < 8; function++) {
+            if (ReadVendorId(0, 0, function) == 0xffffu) {
+                continue;
+            }
+            if (auto err = ScanBus(function)) {
+                return err;
+            }
+        }
+
+        return ErrorCode::Success;
+    }
 } // namespace pci
