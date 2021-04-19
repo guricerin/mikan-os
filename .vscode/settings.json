@@ -9,4 +9,9 @@
             "filenamePattern": "*.EFI"
         }
     ],
+    "files.exclude": {
+        "**/.o": true,
+        "**/.d": true,
+        "**/.bin": true,
+    },
 }

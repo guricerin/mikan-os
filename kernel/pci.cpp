@@ -18,12 +18,12 @@ namespace {
     /// devices[num_device]に情報を書き込みnum_deviceをインクリ
     Error AddDevice(uint8_t bus, uint8_t device, uint8_t function, uint8_t header_type) {
         if (g_num_device == g_devices.size()) {
-            return ErrorCode::Full;
+            return MAKE_ERROR(ErrorCode::Full);
         }
 
         g_devices[g_num_device] = Device{bus, device, function, header_type};
         g_num_device++;
-        return ErrorCode::Success;
+        return MAKE_ERROR(ErrorCode::Success);
     }
 
     Error ScanBus(uint8_t bus);
@@ -47,7 +47,7 @@ namespace {
             return ScanBus(secondary_bus);
         }
 
-        return ErrorCode::Success;
+        return MAKE_ERROR(ErrorCode::Success);
     }
 
     /// 指定のデバイス番号の各ファンクションをスキャン
@@ -57,7 +57,7 @@ namespace {
             return err;
         }
         if (IsSingleFunctionDevice(ReadHeaderType(bus, device, 0))) {
-            return ErrorCode::Success;
+            return MAKE_ERROR(ErrorCode::Success);
         }
 
         for (uint8_t function = 1; function < 8; function++) {
@@ -70,7 +70,7 @@ namespace {
             }
         }
 
-        return ErrorCode::Success;
+        return MAKE_ERROR(ErrorCode::Success);
     }
 
     /// 指定のバス番号の各デバイスをスキャン
@@ -85,7 +85,7 @@ namespace {
             }
         }
 
-        return ErrorCode::Success;
+        return MAKE_ERROR(ErrorCode::Success);
     }
 } // namespace
 
@@ -149,6 +149,40 @@ namespace pci {
             }
         }
 
-        return ErrorCode::Success;
+        return MAKE_ERROR(ErrorCode::Success);
+    }
+
+    uint32_t ReadConfReg(const Device& device, uint8_t reg_addr) {
+        WriteAddress(MakeAddress(device.bus, device.device, device.function, reg_addr));
+        return ReadData();
+    }
+
+    void WriteConfReg(const Device& device, uint8_t reg_addr, uint32_t value) {
+        WriteAddress(MakeAddress(device.bus, device.device, device.function, reg_addr));
+        WriteData(value);
+    }
+
+    WithError<uint64_t> ReadBar(Device& device, unsigned int bar_index) {
+        if (bar_index >= 6) {
+            return {0, MAKE_ERROR(ErrorCode::IndexOutOfRange)};
+        }
+
+        const auto addr = CalcBarAddress(bar_index);
+        const auto bar = ReadConfReg(device, addr);
+
+        // 32 bit address
+        if ((bar & 4u) == 0) {
+            return {bar, MAKE_ERROR(ErrorCode::Success)};
+        }
+
+        // 64 bit address
+        if (bar_index >= 5) {
+            return {0, MAKE_ERROR(ErrorCode::IndexOutOfRange)};
+        }
+
+        const auto bar_upper = ReadConfReg(device, addr + 4);
+        return {
+            bar | (static_cast<uint64_t>(bar_upper) << 32),
+            MAKE_ERROR(ErrorCode::Success)};
     }
 } // namespace pci

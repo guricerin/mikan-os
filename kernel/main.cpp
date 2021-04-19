@@ -2,11 +2,21 @@
 #include <cstdint>
 #include <cstdio>
 
+#include <numeric>
+#include <vector>
+
 #include "../MikanLoaderPkg/frame_buffer_config.h"
 #include "console.hpp"
 #include "font.hpp"
 #include "graphics.hpp"
+#include "logger.hpp"
+#include "mouse.hpp"
 #include "pci.hpp"
+#include "usb/classdriver/mouse.hpp"
+#include "usb/device.hpp"
+#include "usb/memory.hpp"
+#include "usb/xhci/trb.hpp"
+#include "usb/xhci/xhci.hpp"
 
 void operator delete(void* obj) noexcept {
 }
@@ -31,34 +41,33 @@ int printk(const char* format, ...) {
 const PixelColor g_desktop_bg_color{45, 118, 237};
 const PixelColor g_desktop_fg_color{255, 255, 255};
 
-const int g_mouse_cursor_width = 15;
-const int g_mouse_cursor_height = 24;
-const char g_mouse_cursor_shape[g_mouse_cursor_height][g_mouse_cursor_width + 1] = {
-    "@              ",
-    "@@             ",
-    "@.@            ",
-    "@..@           ",
-    "@...@          ",
-    "@....@         ",
-    "@.....@        ",
-    "@......@       ",
-    "@.......@      ",
-    "@........@     ",
-    "@.........@    ",
-    "@..........@   ",
-    "@...........@  ",
-    "@............@ ",
-    "@......@@@@@@@@",
-    "@......@       ",
-    "@....@@.@      ",
-    "@...@ @.@      ",
-    "@..@   @.@     ",
-    "@.@    @.@     ",
-    "@@      @.@    ",
-    "@       @.@    ",
-    "         @.@   ",
-    "         @@@   ",
-};
+char g_mouse_cursor_buf[sizeof(MouseCursor)];
+MouseCursor* g_mouse_cursor;
+
+void MouseObserver(int8_t displacement_x, int8_t displacement_y) {
+    g_mouse_cursor->MoveRelative({displacement_x, displacement_y});
+}
+
+void SwitchEhci2Xhci(const pci::Device& xhc_device) {
+    bool intel_ehc_exist = false;
+    for (int i = 0; i < pci::g_num_device; ++i) {
+        if (pci::g_devices[i].class_code.Match(0x0cu, 0x03u, 0x20u) /* EHCI */ &&
+            0x8086 == pci::ReadVendorId(pci::g_devices[i])) {
+            intel_ehc_exist = true;
+            break;
+        }
+    }
+    if (!intel_ehc_exist) {
+        return;
+    }
+
+    uint32_t superspeed_ports = pci::ReadConfReg(xhc_device, 0xdc); // USB3PRM
+    pci::WriteConfReg(xhc_device, 0xd8, superspeed_ports);          // USB3_PSSEN
+    uint32_t ehci2xhci_ports = pci::ReadConfReg(xhc_device, 0xd4);  // XUSB2PRM
+    pci::WriteConfReg(xhc_device, 0xd0, ehci2xhci_ports);           // XUSB2PR
+    Log(LogLevel::Debug, "SwitchEhci2Xhci: SS = %02, xHCI = %02x\n",
+        superspeed_ports, ehci2xhci_ports);
+}
 
 // ブートローダからフレームバッファの情報を受け取る
 extern "C" void KernelMain(const FrameBufferConfig& frame_buffer_config) {
@@ -84,31 +93,88 @@ extern "C" void KernelMain(const FrameBufferConfig& frame_buffer_config) {
 
     g_console = new (g_console_buf) Console{*g_pixel_writer, g_desktop_fg_color, g_desktop_bg_color};
     printk("Welcome to MikanOS!\n");
+    SetLogLevel(LogLevel::Debug);
 
     // マウスカーソル描画
-    for (int dy = 0; dy < g_mouse_cursor_height; dy++) {
-        for (int dx = 0; dx < g_mouse_cursor_width; dx++) {
-            if (g_mouse_cursor_shape[dy][dx] == '@') {
-                g_pixel_writer->Write(200 + dx, 100 + dy, {0, 0, 0});
-            } else if (g_mouse_cursor_shape[dy][dx] == '.') {
-                g_pixel_writer->Write(200 + dx, 100 + dy, {255, 255, 255});
-            }
-        }
-    }
+    g_mouse_cursor = new (g_mouse_cursor_buf) MouseCursor{
+        g_pixel_writer, g_desktop_bg_color, {300, 200}};
 
     // PCIデバイスを列挙
     auto err = pci::ScanAllBus();
-    printk("ScanAllBus: %d\n", err.Name());
+    Log(LogLevel::Debug, "ScanAllBus: %s\n", err.Name());
     for (int i = 0; i < pci::g_num_device; i++) {
         const auto& device = pci::g_devices[i];
         auto vendor_id = pci::ReadVendorId(device.bus, device.device, device.function);
         auto class_code = pci::ReadClassCode(device.bus, device.device, device.function);
-        printk("%d.%d.%d: vend %04x, class %08x, head %02x\n",
-               device.bus, device.device, device.function, vendor_id, class_code, device.header_type);
+        Log(LogLevel::Debug, "%d.%d.%d: vend %04x, class %08x, head %02x\n",
+            device.bus, device.device, device.function, vendor_id, class_code, device.header_type);
+    }
+
+    // intel製を優先してxHCを探す
+    pci::Device* xhc_device = nullptr;
+    for (int i = 0; i < pci::g_num_device; i++) {
+        if (pci::g_devices[i].class_code.Match(0x0cu, 0x03u, 0x30u)) {
+            xhc_device = &pci::g_devices[i];
+
+            if (pci::ReadVendorId(*xhc_device) == 0x8086) {
+                break;
+            }
+        }
+    }
+    if (xhc_device) {
+        Log(LogLevel::Debug, "xHC has been found: %d.%d.%d\n",
+            xhc_device->bus, xhc_device->device, xhc_device->function);
+    }
+
+    // xHCを制御するレジスタ群はメモリマップドIOなので、そのアドレスを取得
+    const WithError<uint64_t> xhc_bar = pci::ReadBar(*xhc_device, 0);
+    Log(LogLevel::Debug, "ReadBar: %s\n", xhc_bar.error.Name());
+    const uint64_t xhc_mmio_base = xhc_bar.value & ~static_cast<uint64_t>(0xf);
+    Log(LogLevel::Debug, "xHC mmio_base = %08lx\n", xhc_mmio_base);
+
+    // xHC初期化
+    usb::xhci::Controller xhc{xhc_mmio_base};
+    if (pci::ReadVendorId(*xhc_device) == 0x8086) {
+        SwitchEhci2Xhci(*xhc_device);
+    }
+    {
+        auto err = xhc.Initialize();
+        Log(LogLevel::Debug, "xhc.Initialize: %s\n", err.Name());
+    }
+
+    // xHC起動
+    Log(LogLevel::Info, "xHC starting\n");
+    xhc.Run();
+
+    // すべてのUSBポートを探索し、何かが接続されているポートの設定を行う
+    usb::HIDMouseDriver::default_observer = MouseObserver;
+    for (int i = 1; i <= xhc.MaxPorts(); i++) {
+        auto port = xhc.PortAt(i);
+        Log(LogLevel::Debug, "Port %d: IsConnected=%d\n", port.IsConnected());
+
+        if (port.IsConnected()) {
+            if (auto err = ConfigurePort(xhc, port)) {
+                Log(LogLevel::Error, "failed to configure port: %s at %s:%d\n",
+                    err.Name(), err.File(), err.Line());
+                continue;
+            }
+        }
+    }
+
+    // ポーリング（xHCのイベント処理）
+    while (1) {
+        if (auto err = ProcessEvent(xhc)) {
+            Log(LogLevel::Error, "Error while ProccessEvent: %s at %s:%d\n",
+                err.Name(), err.File(), err.Line());
+        }
     }
 
     while (1) {
         // CPU停止
         __asm__("hlt");
     }
+}
+
+extern "C" void __cxa_pure_virtual() {
+    while (1) __asm__("hlt");
 }
