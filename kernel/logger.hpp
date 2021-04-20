@@ -1,10 +1,10 @@
 #pragma once
 
-enum class LogLevel {
-    Error = 3,
-    Warn = 4,
-    Info = 6,
-    Debug = 7,
+enum LogLevel {
+    kError = 3,
+    kWarn = 4,
+    kInfo = 6,
+    kDebug = 7,
 };
 
 /// グローバルなログ優先度のしきい値をlevelに設定する．

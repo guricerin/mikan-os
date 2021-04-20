@@ -6,7 +6,7 @@
 #include "console.hpp"
 
 namespace {
-    LogLevel g_log_level = LogLevel::Warn;
+    LogLevel g_log_level = kWarn;
 }
 
 extern Console* g_console;

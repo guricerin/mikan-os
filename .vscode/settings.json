@@ -14,4 +14,7 @@
         "**/.d": true,
         "**/.bin": true,
     },
+    "files.associations": {
+        "new": "cpp"
+    },
 }

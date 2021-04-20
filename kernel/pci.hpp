@@ -11,9 +11,9 @@
 
 namespace pci {
     /// CONFIG_ADDRESSレジスタのIOポートアドレス
-    const uint16_t CONFIG_ADDRESS = 0x0cf8;
+    const uint16_t kConfigAddress = 0x0cf8;
     /// CONFIG_DATAレジスタのIOポートアドレス
-    const uint16_t CONFIG_DATA = 0x0cfc;
+    const uint16_t kConfigData = 0x0cfc;
 
     /// デバイスのクラスコード
     struct ClassCode {
@@ -66,7 +66,7 @@ namespace pci {
     ///   - 23:16 : サブクラス
     ///   - 15:8  : インターフェース
     ///   - 7:0   : リビジョン
-    uint32_t ReadClassCode(uint8_t bus, uint8_t device, uint8_t function);
+    ClassCode ReadClassCode(uint8_t bus, uint8_t device, uint8_t function);
 
     /// 指定された PCI デバイスの 32 ビットレジスタを読み取る */
     uint32_t ReadConfReg(const Device& device, uint8_t reg_addr);

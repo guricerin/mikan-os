@@ -3,90 +3,92 @@
 #include <array>
 #include <cstdio>
 
-enum class ErrorCode {
-    Success,
-    Full,
-    Empty,
-    NoEnoughMemory,
-    IndexOutOfRange,
-    HostContorollerNotHalted,
-    InvalidSlotID,
-    PortNotConnected,
-    InvalidEndpointNumber,
-    TransferRingNotSet,
-    AlreadyAllocated,
-    NotImplemented,
-    InvalidDescriptor,
-    BufferTooSmall,
-    UnknownDevice,
-    NoCorrespondingSetupStage,
-    TransferFailed,
-    InvalidPhase,
-    UnknownXHCISpeedID,
-    NoWaiter,
-    LastOfCode, // この列挙子は常に最後に記述
-};
-
 class Error {
+public:
+    enum Code {
+        kSuccess,
+        kFull,
+        kEmpty,
+        kNoEnoughMemory,
+        kIndexOutOfRange,
+        kHostControllerNotHalted,
+        kInvalidSlotID,
+        kPortNotConnected,
+        kInvalidEndpointNumber,
+        kTransferRingNotSet,
+        kAlreadyAllocated,
+        kNotImplemented,
+        kInvalidDescriptor,
+        kBufferTooSmall,
+        kUnknownDevice,
+        kNoCorrespondingSetupStage,
+        kTransferFailed,
+        kInvalidPhase,
+        kUnknownXHCISpeedID,
+        kNoWaiter,
+        kLastOfCode, // この列挙子は常に最後に配置する
+    };
+
 private:
-    ErrorCode _code;
-    const char* _file;
-    int _line;
+    static constexpr std::array code_names_{
+        "kSuccess",
+        "kFull",
+        "kEmpty",
+        "kNoEnoughMemory",
+        "kIndexOutOfRange",
+        "kHostControllerNotHalted",
+        "kInvalidSlotID",
+        "kPortNotConnected",
+        "kInvalidEndpointNumber",
+        "kTransferRingNotSet",
+        "kAlreadyAllocated",
+        "kNotImplemented",
+        "kInvalidDescriptor",
+        "kBufferTooSmall",
+        "kUnknownDevice",
+        "kNoCorrespondingSetupStage",
+        "kTransferFailed",
+        "kInvalidPhase",
+        "kUnknownXHCISpeedID",
+        "kNoWaiter",
+    };
+    static_assert(Error::Code::kLastOfCode == code_names_.size());
 
 public:
-    Error(ErrorCode code, const char* file, int line)
-        : _code{code}, _file{file}, _line{line} {}
+    Error(Code code, const char* file, int line) : code_{code}, line_{line}, file_{file} {}
+
+    Code Cause() const {
+        return this->code_;
+    }
 
     operator bool() const {
-        return this->_code != ErrorCode::Success;
+        return this->code_ != kSuccess;
     }
 
     const char* Name() const {
-        return _code_names[static_cast<int>(this->_code)];
-    }
-
-    ErrorCode Cause() const {
-        return this->_code;
+        return code_names_[static_cast<int>(this->code_)];
     }
 
     const char* File() const {
-        return this->_file;
+        return this->file_;
     }
 
     int Line() const {
-        return this->_line;
+        return this->line_;
     }
 
 private:
-    static constexpr std::array _code_names = {
-        "Success",
-        "Full",
-        "Empty",
-        "NoEnoughMemory",
-        "IndexOutOfRange",
-        "HostControllerNotHalted",
-        "InvalidSlotID",
-        "PortNotConnected",
-        "InvalidEndpointNumber",
-        "TransferRingNotSet",
-        "AlreadyAllocated",
-        "NotImplemented",
-        "InvalidDescriptor",
-        "BufferTooSmall",
-        "UnknownDevice",
-        "NoCorrespondingSetupStage",
-        "TransferFailed",
-        "InvalidPhase",
-        "UnknownXHCISpeedID",
-        "NoWaiter",
-    };
-    static_assert(static_cast<size_t>(ErrorCode::LastOfCode) == _code_names.size());
+    Code code_;
+    int line_;
+    const char* file_;
 };
 
 #define MAKE_ERROR(code) Error((code), __FILE__, __LINE__)
 
+// #@@range_begin(with_error)
 template <class T>
 struct WithError {
     T value;
     Error error;
 };
+// #@@range_end(with_error)
