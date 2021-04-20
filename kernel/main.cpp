@@ -6,9 +6,11 @@
 #include <vector>
 
 #include "../MikanLoaderPkg/frame_buffer_config.h"
+#include "asmfunc.h"
 #include "console.hpp"
 #include "font.hpp"
 #include "graphics.hpp"
+#include "interrupt.hpp"
 #include "logger.hpp"
 #include "mouse.hpp"
 #include "pci.hpp"
@@ -49,7 +51,7 @@ void SwitchEhci2Xhci(const pci::Device& xhc_device) {
     bool intel_ehc_exist = false;
     for (int i = 0; i < pci::g_num_device; ++i) {
         if (pci::g_devices[i].class_code.Match(0x0cu, 0x03u, 0x20u) /* EHCI */ &&
-            0x8086 == pci::ReadVendorId(pci::g_devices[i])) {
+            pci::ReadVendorId(pci::g_devices[i]) == 0x8086) {
             intel_ehc_exist = true;
             break;
         }
@@ -64,6 +66,20 @@ void SwitchEhci2Xhci(const pci::Device& xhc_device) {
     pci::WriteConfReg(xhc_device, 0xd0, ehci2xhci_ports);           // XUSB2PR
     Log(kDebug, "SwitchEhci2Xhci: SS = %02, xHCI = %02x\n",
         superspeed_ports, ehci2xhci_ports);
+}
+
+/// xHCIホストコントローラ
+usb::xhci::Controller* g_xhc;
+
+/// xHCI用割り込みハンドラ
+__attribute__((interrupt)) void IntHandlerXHCI(InterruptFrame* frame) {
+    while (g_xhc->PrimaryEventRing()->HasFront()) {
+        if (auto err = ProcessEvent(*g_xhc)) {
+            Log(kError, "Error while ProcessEvent: %s at %s:%d\n",
+                err.Name(), err.File(), err.Line());
+        }
+    }
+    NotifyEndOfInterrupt();
 }
 
 // ブートローダからフレームバッファの情報を受け取る
@@ -120,12 +136,28 @@ extern "C" void KernelMain(const FrameBufferConfig& frame_buffer_config) {
         }
     }
     if (xhc_device) {
-        Log(kWarn, "xHC has been found: %d.%d.%d\n",
+        Log(kInfo, "xHC has been found: %d.%d.%d\n",
             xhc_device->bus, xhc_device->device, xhc_device->function);
     } else {
         Log(kError, "Error! xHC has been not found: %d.%d.%d\n",
             xhc_device->bus, xhc_device->device, xhc_device->function);
     }
+
+    // IDTをCPUに登録
+    const uint16_t cs = GetCS();
+    SetIDTEntry(g_idt[InterruptVector::kXHCI],
+                MakeIDTAttr(DescriptorType::kInterruptGate, 0),
+                reinterpret_cast<uint64_t>(IntHandlerXHCI),
+                cs);
+    LoadIDT(sizeof(g_idt) - 1, reinterpret_cast<uintptr_t>(&g_idt[0]));
+
+    // MSI割り込みを有効化
+    // このプログラムが動作しているCPUコア（Bootstrap Processor）の固有番号
+    const uint8_t bsp_local_apic_id = *reinterpret_cast<const uint32_t*>(0xfee00020) >> 24;
+    pci::ConfigureMSIFixedDestination(
+        *xhc_device, bsp_local_apic_id,
+        pci::MSITriggerMode::kLevel, pci::MSIDeliveryMode::kFixed,
+        InterruptVector::kXHCI, 0);
 
     // xHCを制御するレジスタ群はメモリマップドIOなので、そのアドレスを取得
     const WithError<uint64_t> xhc_bar = pci::ReadBar(*xhc_device, 0);
@@ -150,11 +182,15 @@ extern "C" void KernelMain(const FrameBufferConfig& frame_buffer_config) {
     Log(kInfo, "xHC starting\n");
     xhc.Run();
 
+    ::g_xhc = &xhc;
+    // set interrupt : 割り込みを有効化
+    __asm__("sti");
+
     // すべてのUSBポートを探索し、何かが接続されているポートの設定を行う
     usb::HIDMouseDriver::default_observer = MouseObserver;
     for (int i = 1; i <= xhc.MaxPorts(); i++) {
         auto port = xhc.PortAt(i);
-        Log(kDebug, "Port %d: IsConnected=%d\n", port.IsConnected());
+        Log(kDebug, "Port %d: IsConnected=%d\n", i, port.IsConnected());
 
         if (port.IsConnected()) {
             if (auto err = ConfigurePort(xhc, port)) {
@@ -162,14 +198,6 @@ extern "C" void KernelMain(const FrameBufferConfig& frame_buffer_config) {
                     err.Name(), err.File(), err.Line());
                 continue;
             }
-        }
-    }
-
-    // ポーリング（xHCのイベント処理）
-    while (1) {
-        if (auto err = ProcessEvent(xhc)) {
-            Log(kError, "Error while ProccessEvent: %s at %s:%d\n",
-                err.Name(), err.File(), err.Line());
         }
     }
 
