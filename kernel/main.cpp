@@ -15,8 +15,10 @@
 #include "logger.hpp"
 #include "memory_map.hpp"
 #include "mouse.hpp"
+#include "paging.hpp"
 #include "pci.hpp"
 #include "queue.hpp"
+#include "segment.hpp"
 #include "usb/classdriver/mouse.hpp"
 #include "usb/device.hpp"
 #include "usb/memory.hpp"
@@ -88,9 +90,11 @@ __attribute__((interrupt)) void IntHandlerXHCI(InterruptFrame* frame) {
     NotifyEndOfInterrupt();
 }
 
+alignas(16) uint8_t g_kernel_main_stack[1024 * 1024];
+
 // ブートローダからフレームバッファの情報とメモリマップを受け取る
-extern "C" void KernelMain(const FrameBufferConfig& frame_buffer_config,
-                           const MemoryMap& memory_map) {
+extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
+                                   const MemoryMap& memory_map) {
     switch (frame_buffer_config.pixel_format) {
     case kPixelRGBResv8BitPerColor:
         g_pixel_writer = new (g_pixel_writer_buf) RGBResv8BitPerColorPixelWriter{frame_buffer_config};
@@ -115,15 +119,27 @@ extern "C" void KernelMain(const FrameBufferConfig& frame_buffer_config,
     printk("Welcome to MikanOS!\n");
     SetLogLevel(kWarn);
 
+    // セグメントの設定（GDTを再構築）
+    SetupSegments();
+
+    const uint16_t kernel_cs = 1 << 3;
+    const uint16_t kernel_ss = 2 << 3;
+    // ヌルディスクリプタにする
+    SetDSAll(0);
+    SetCSSS(kernel_cs, kernel_ss);
+
+    // ページテーブル設定
+    SetupIdentityPageTable();
+
     const std::array available_memory_types{
         MemoryType::kEfiBootServiceCode,
         MemoryType::kEfiBootServiceData,
         MemoryType::kEfiConventionalMemory,
     };
 
-    printk("memory_map: %p\n", &memory_map);
-    for (uintptr_t iter = reinterpret_cast<uintptr_t>(memory_map.buffer);
-         iter < reinterpret_cast<uintptr_t>(memory_map.buffer) + memory_map.map_size;
+    const auto memory_map_base = reinterpret_cast<uintptr_t>(memory_map.buffer);
+    for (uintptr_t iter = memory_map_base;
+         iter < memory_map_base + memory_map.map_size;
          iter += memory_map.descriptor_size) {
         auto desc = reinterpret_cast<MemoryDescriptor*>(iter);
         for (int i = 0; i < available_memory_types.size(); i++) {
@@ -131,7 +147,7 @@ extern "C" void KernelMain(const FrameBufferConfig& frame_buffer_config,
                 printk("type = %u, phys = [%08lx - %08lx], pages = %lu, attr = %08lx\n",
                        desc->type,
                        desc->physical_start,
-                       desc->physical_start + desc->number_of_pages * 4096 - 1,
+                       desc->physical_start + desc->number_of_pages * kUEFIPageSize - 1,
                        desc->number_of_pages,
                        desc->attribute);
             }
@@ -261,11 +277,6 @@ extern "C" void KernelMain(const FrameBufferConfig& frame_buffer_config,
         default:
             Log(kError, "Unknown message type: %d\n", msg.type);
         }
-    }
-
-    while (1) {
-        // CPU停止
-        __asm__("hlt");
     }
 }
 

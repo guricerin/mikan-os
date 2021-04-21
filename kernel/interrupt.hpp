@@ -5,16 +5,7 @@
 #include <array>
 #include <cstdint>
 
-enum class DescriptorType {
-    kUpper8Bytes = 0,
-    kLDT = 2,
-    kTSSAvailable = 9,
-    kTSSBusy = 11,
-    kCalcGate = 12,
-    /// 通常の割り込み
-    kInterruptGate = 14,
-    kTrapGate = 15,
-};
+#include "x86_descriptor.hpp"
 
 union InterruptDescriptorAttribute {
     uint16_t data;
