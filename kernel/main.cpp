@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <cstdio>
 
+#include <array>
 #include <numeric>
 #include <vector>
 
@@ -14,6 +15,7 @@
 #include "logger.hpp"
 #include "mouse.hpp"
 #include "pci.hpp"
+#include "queue.hpp"
 #include "usb/classdriver/mouse.hpp"
 #include "usb/device.hpp"
 #include "usb/memory.hpp"
@@ -71,14 +73,17 @@ void SwitchEhci2Xhci(const pci::Device& xhc_device) {
 /// xHCIホストコントローラ
 usb::xhci::Controller* g_xhc;
 
+struct Message {
+    enum Type {
+        kInterruptXHCI,
+    } type;
+};
+
+ArrayQueue<Message>* g_main_queue;
+
 /// xHCI用割り込みハンドラ
 __attribute__((interrupt)) void IntHandlerXHCI(InterruptFrame* frame) {
-    while (g_xhc->PrimaryEventRing()->HasFront()) {
-        if (auto err = ProcessEvent(*g_xhc)) {
-            Log(kError, "Error while ProcessEvent: %s at %s:%d\n",
-                err.Name(), err.File(), err.Line());
-        }
-    }
+    g_main_queue->Push(Message{Message::kInterruptXHCI});
     NotifyEndOfInterrupt();
 }
 
@@ -111,6 +116,10 @@ extern "C" void KernelMain(const FrameBufferConfig& frame_buffer_config) {
     // マウスカーソル描画
     g_mouse_cursor = new (g_mouse_cursor_buf) MouseCursor{
         g_pixel_writer, g_desktop_bg_color, {300, 200}};
+
+    std::array<Message, 32> main_queue_data;
+    ArrayQueue<Message> main_queue(main_queue_data);
+    ::g_main_queue = &main_queue;
 
     // PCIデバイスを列挙
     auto err = pci::ScanAllBus();
@@ -183,8 +192,6 @@ extern "C" void KernelMain(const FrameBufferConfig& frame_buffer_config) {
     xhc.Run();
 
     ::g_xhc = &xhc;
-    // set interrupt : 割り込みを有効化
-    __asm__("sti");
 
     // すべてのUSBポートを探索し、何かが接続されているポートの設定を行う
     usb::HIDMouseDriver::default_observer = MouseObserver;
@@ -198,6 +205,36 @@ extern "C" void KernelMain(const FrameBufferConfig& frame_buffer_config) {
                     err.Name(), err.File(), err.Line());
                 continue;
             }
+        }
+    }
+
+    // 割り込みイベントループ
+    while (1) {
+        // clear interrupt : 割り込みを無効化
+        // データ競合の回避（キューの操作中に割り込みさせない）
+        __asm__("cli");
+        if (main_queue.Count() == 0) {
+            // set interrupt : 割り込みを有効化
+            __asm__("sti\n\thlt");
+            // 割り込みが発生すると、この次の行（ここではcontinue）から処理を再開
+            continue;
+        }
+
+        Message msg = main_queue.Front();
+        main_queue.Pop();
+        __asm__("sti");
+
+        switch (msg.type) {
+        case Message::kInterruptXHCI:
+            while (xhc.PrimaryEventRing()->HasFront()) {
+                if (auto err = ProcessEvent(xhc)) {
+                    Log(kError, "Error while ProcessEvent: %s at %s:%d\n",
+                        err.Name(), err.File(), err.Line());
+                }
+            }
+            break;
+        default:
+            Log(kError, "Unknown message type: %d\n", msg.type);
         }
     }
 
