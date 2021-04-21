@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../MikanLoaderPkg/frame_buffer_config.h"
+#include "frame_buffer_config.hpp"
 #include <cstdint>
 
 struct PixelColor {

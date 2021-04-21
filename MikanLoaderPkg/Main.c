@@ -1,5 +1,3 @@
-#include "elf.h"
-#include "frame_buffer_config.h"
 #include <Guid/FileInfo.h>
 #include <Library/BaseMemoryLib.h>
 #include <Library/MemoryAllocationLib.h>
@@ -12,17 +10,11 @@
 #include <Protocol/SimpleFileSystem.h>
 #include <Uefi.h>
 
-// メインメモリのどの領域がどんな用途で使われているか
-typedef struct {
-    UINTN buffer_size;
-    VOID* buffer;
-    UINTN map_size;            // メモリマップ全体のバイト数
-    UINTN map_key;             // 値が変化したらメモリマップが変化していることを示す
-    UINTN descriptor_size;     // メモリディスクリプタ（メモリマップの各要素）のバイト数
-    UINT32 descriptor_version; // 未使用
-} MemoryMap;
+#include "../kernel/frame_buffer_config.hpp"
+#include "../kernel/memory_map.hpp"
+#include "elf.h"
 
-EFI_STATUS GetMemoryMap(MemoryMap* map) {
+EFI_STATUS GetMemoryMap(struct MemoryMap* map) {
     if (map->buffer == NULL) {
         return EFI_BUFFER_TOO_SMALL;
     }
@@ -101,7 +93,7 @@ const CHAR16* GetMemoryTypeUnicode(EFI_MEMORY_TYPE type) {
 }
 
 // メモリマップをcsv形式で保存
-EFI_STATUS SaveMemoryMap(MemoryMap* map, EFI_FILE_PROTOCOL* file) {
+EFI_STATUS SaveMemoryMap(struct MemoryMap* map, EFI_FILE_PROTOCOL* file) {
     CHAR8 buf[256];
     UINTN len;
 
@@ -133,7 +125,7 @@ EFI_STATUS SaveMemoryMap(MemoryMap* map, EFI_FILE_PROTOCOL* file) {
     return EFI_SUCCESS;
 }
 
-// GOP取得
+// GOP(Graphics Output Protocol)取得
 EFI_STATUS OpenGOP(EFI_HANDLE image_handle, EFI_GRAPHICS_OUTPUT_PROTOCOL** gop) {
     UINTN num_gop_handles = 0;
     EFI_HANDLE* gop_handles = NULL;
@@ -206,7 +198,7 @@ void CopyLoadSegments(Elf64_Ehdr* ehdr) {
 EFI_STATUS EFIAPI UefiMain(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE* system_table) {
     // メモリマップ取得
     CHAR8 memmap_buf[4096 * 4]; // 16KiB
-    MemoryMap memmap = {sizeof(memmap_buf), memmap_buf, 0, 0, 0, 0};
+    struct MemoryMap memmap = {sizeof(memmap_buf), memmap_buf, 0, 0, 0, 0};
     EFI_STATUS status = GetMemoryMap(&memmap);
     if (EFI_ERROR(status)) {
         Print(L"failed to get memory map: %r\n", status);
@@ -333,7 +325,7 @@ EFI_STATUS EFIAPI UefiMain(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE* system_tab
 
     // カーネル起動
     UINT64 entry_addr = *(UINT64*)(kernel_first_addr + 24);
-    FrameBufferConfig config = {
+    struct FrameBufferConfig frame_buffer_config = {
         (UINT8*)gop->Mode->FrameBufferBase,
         gop->Mode->Info->PixelsPerScanLine,
         gop->Mode->Info->HorizontalResolution,
@@ -341,20 +333,22 @@ EFI_STATUS EFIAPI UefiMain(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE* system_tab
         0};
     switch (gop->Mode->Info->PixelFormat) {
     case PixelRedGreenBlueReserved8BitPerColor:
-        config.pixel_format = kPixelRGBResv8BitPerColor;
+        frame_buffer_config.pixel_format = kPixelRGBResv8BitPerColor;
         break;
     case PixelBlueGreenRedReserved8BitPerColor:
-        config.pixel_format = kPixelBGRResv8BitPerColor;
+        frame_buffer_config.pixel_format = kPixelBGRResv8BitPerColor;
         break;
     default:
         Print(L"Unimplemented pixel format: %d\n", gop->Mode->Info->PixelFormat);
         Halt();
     }
     // エントリーポイントをC言語の関数として解釈させる
-    typedef void EntryPointType(const FrameBufferConfig*);
+    typedef void EntryPointType(const struct FrameBufferConfig*,
+                                const struct MemoryMap*);
     EntryPointType* entry_point = (EntryPointType*)entry_addr;
-    entry_point(&config);
+    entry_point(&frame_buffer_config, &memmap);
 
+    // エントリーポイント呼び出しが上手くいけば、以下は実行されないはず
     Print(L"All done\n");
     while (1)
         ;
