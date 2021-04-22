@@ -12,6 +12,7 @@
 #include "frame_buffer_config.hpp"
 #include "graphics.hpp"
 #include "interrupt.hpp"
+#include "layer.hpp"
 #include "logger.hpp"
 #include "memory_manager.hpp"
 #include "memory_map.hpp"
@@ -25,9 +26,7 @@
 #include "usb/memory.hpp"
 #include "usb/xhci/trb.hpp"
 #include "usb/xhci/xhci.hpp"
-
-const PixelColor g_desktop_bg_color{45, 118, 237};
-const PixelColor g_desktop_fg_color{255, 255, 255};
+#include "window.hpp"
 
 char g_pixel_writer_buf[sizeof(RGBResv8BitPerColorPixelWriter)];
 PixelWriter* g_pixel_writer;
@@ -49,11 +48,11 @@ int printk(const char* format, ...) {
 char g_memory_manager_buf[sizeof(BitmapMemoryManager)];
 BitmapMemoryManager* g_memory_manager;
 
-char g_mouse_cursor_buf[sizeof(MouseCursor)];
-MouseCursor* g_mouse_cursor;
+unsigned int g_mouse_layer_id;
 
 void MouseObserver(int8_t displacement_x, int8_t displacement_y) {
-    g_mouse_cursor->MoveRelative({displacement_x, displacement_y});
+    g_layer_manager->MoveRelative({displacement_x, displacement_y});
+    g_layer_manager->Draw();
 }
 
 void SwitchEhci2Xhci(const pci::Device& xhc_device) {
@@ -113,13 +112,7 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
     const int frame_width = frame_buffer_config.horizontal_resolution;
     const int frame_height = frame_buffer_config.vertical_resolution;
     // ピクセル描画
-    // 背景
-    FillRectangle(*g_pixel_writer, {0, 0}, {frame_width, frame_height - 50}, g_desktop_bg_color);
-    // 下部のアイコンバー
-    FillRectangle(*g_pixel_writer, {0, frame_height - 50}, {frame_width, 50}, {1, 8, 17});
-    FillRectangle(*g_pixel_writer, {0, frame_height - 50}, {frame_width / 5, 50}, {80, 80, 80});
-    // 左下のメニューアイコンっぽい図形
-    DrawRectangle(*g_pixel_writer, {10, frame_height - 40}, {30, 30}, {160, 160, 160});
+    DrawDesktop(*g_pixel_writer);
 
     g_console = new (g_console_buf) Console{*g_pixel_writer, g_desktop_fg_color, g_desktop_bg_color};
     printk("Welcome to MikanOS!\n");
@@ -162,6 +155,12 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
     }
     g_memory_manager->SetMemoryRange(FrameID{1}, FrameID{available_end / kBytesPerFrame});
     Log(kWarn, "available_end: %p\n", available_end);
+
+    if (auto err = InitializeHeap(*g_memory_manager)) {
+        Log(kError, "failed to allocate pages: %s at %s:%d",
+            err.Name(), err.File(), err.Line());
+        exit(1);
+    }
 
     // マウスカーソル描画
     g_mouse_cursor = new (g_mouse_cursor_buf) MouseCursor{

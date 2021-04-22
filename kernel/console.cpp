@@ -1,40 +1,60 @@
 #include "console.hpp"
-#include "font.hpp"
 
+#include "font.hpp"
+#include "layer.hpp"
 #include <cstring>
 
-Console::Console(PixelWriter& writer, const PixelColor& fg_color, const PixelColor& bg_color) : _writer{writer}, _fg_color{fg_color}, _bg_color{bg_color}, _buffer{}, _cursor_row{0}, _cursor_column{0} {
+Console::Console(const PixelColor& fg_color, const PixelColor& bg_color)
+    : writer_{nullptr}, fg_color_{fg_color}, bg_color_{bg_color},
+      buffer_{}, cursor_row_{0}, cursor_column_{0} {
 }
 
 void Console::PutString(const char* s) {
     while (*s) {
         if (*s == '\n') {
             NewLine();
-        } else if (_cursor_column < _columns - 1) {
-            WriteAscii(_writer, 8 * _cursor_column, 16 * _cursor_row, *s, _fg_color);
-            _buffer[_cursor_row][_cursor_column] = *s;
-            _cursor_column++;
+        } else if (cursor_column_ < kColumns - 1) {
+            WriteAscii(*writer_, 8 * cursor_column_, 16 * cursor_row_, *s, fg_color_);
+            buffer_[cursor_row_][cursor_column_] = *s;
+            cursor_column_++;
         }
         s++;
     }
+    if (g_layer_manager) {
+        g_layer_manager->Draw();
+    }
+}
+
+void Console::SetWriter(PixelWriter* writer) {
+    if (writer_ == writer) {
+        return;
+    }
+    writer_ = writer;
+    Refresh();
 }
 
 void Console::NewLine() {
-    _cursor_column = 0;
-    if (_cursor_row < _rows - 1) {
-        _cursor_row++;
+    cursor_column_ = 0;
+    if (cursor_row_ < kRows - 1) {
+        cursor_row_++;
     } else { // 最下行の場合
         // まずは塗りつぶす
-        for (int y = 0; y < 16 * _rows; y++) {
-            for (int x = 0; x < 8 * _columns; x++) {
-                _writer.Write(x, y, _bg_color);
+        for (int y = 0; y < 16 * kRows; y++) {
+            for (int x = 0; x < 8 * kColumns; x++) {
+                writer_->Write(x, y, bg_color_);
             }
         }
         // 表示領域を1行ずらす
-        for (int row = 0; row < _rows - 1; row++) {
-            memcpy(_buffer[row], _buffer[row + 1], _columns + 1);
-            WriteString(_writer, 0, 16 * row, _buffer[row], _fg_color);
+        for (int row = 0; row < kRows - 1; row++) {
+            memcpy(buffer_[row], buffer_[row + 1], kColumns + 1);
+            WriteString(*writer_, 0, 16 * row, buffer_[row], fg_color_);
         }
-        memset(_buffer[_rows - 1], 0, _columns + 1);
+        memset(buffer_[kRows - 1], 0, kColumns + 1);
+    }
+}
+
+void Console::Refresh() {
+    for (int row = 0; row < kRows; row++) {
+        WriteString(*writer_, 0, 16 * row, buffer_[row], fg_color_);
     }
 }

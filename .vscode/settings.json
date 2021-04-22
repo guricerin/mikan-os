@@ -10,9 +10,10 @@
         }
     ],
     "files.exclude": {
-        "**/.o": true,
-        "**/.d": true,
-        "**/.bin": true,
+        "**/*.o": true,
+        "**/*.d": true,
+        "**/*.bin": true,
+        "**/*.elf": true,
     },
     "files.associations": {
         "new": "cpp"
