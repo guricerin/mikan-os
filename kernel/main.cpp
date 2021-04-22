@@ -13,6 +13,7 @@
 #include "graphics.hpp"
 #include "interrupt.hpp"
 #include "logger.hpp"
+#include "memory_manager.hpp"
 #include "memory_map.hpp"
 #include "mouse.hpp"
 #include "paging.hpp"
@@ -45,6 +46,9 @@ int printk(const char* format, ...) {
     return result;
 }
 
+char g_memory_manager_buf[sizeof(BitmapMemoryManager)];
+BitmapMemoryManager* g_memory_manager;
+
 char g_mouse_cursor_buf[sizeof(MouseCursor)];
 MouseCursor* g_mouse_cursor;
 
@@ -76,12 +80,14 @@ void SwitchEhci2Xhci(const pci::Device& xhc_device) {
 /// xHCIホストコントローラ
 usb::xhci::Controller* g_xhc;
 
+/// 割り込みメッセージ
 struct Message {
     enum Type {
         kInterruptXHCI,
     } type;
 };
 
+/// 割り込みキュー
 ArrayQueue<Message>* g_main_queue;
 
 /// xHCI用割り込みハンドラ
@@ -131,28 +137,31 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
     // ページテーブル設定
     SetupIdentityPageTable();
 
-    const std::array available_memory_types{
-        MemoryType::kEfiBootServiceCode,
-        MemoryType::kEfiBootServiceData,
-        MemoryType::kEfiConventionalMemory,
-    };
-
+    ::g_memory_manager = new (g_memory_manager_buf) BitmapMemoryManager;
+    // メモリマネージャーにUEFIのメモリマップを伝える
     const auto memory_map_base = reinterpret_cast<uintptr_t>(memory_map.buffer);
+    uintptr_t available_end = 0;
     for (uintptr_t iter = memory_map_base;
          iter < memory_map_base + memory_map.map_size;
          iter += memory_map.descriptor_size) {
         auto desc = reinterpret_cast<MemoryDescriptor*>(iter);
-        for (int i = 0; i < available_memory_types.size(); i++) {
-            if (desc->type == available_memory_types[i]) {
-                printk("type = %u, phys = [%08lx - %08lx], pages = %lu, attr = %08lx\n",
-                       desc->type,
-                       desc->physical_start,
-                       desc->physical_start + desc->number_of_pages * kUEFIPageSize - 1,
-                       desc->number_of_pages,
-                       desc->attribute);
-            }
+        if (available_end < desc->physical_start) {
+            g_memory_manager->MarkAllocated(
+                FrameID(available_end / kBytesPerFrame),
+                (desc->physical_start - available_end) / kBytesPerFrame);
+        }
+
+        const auto physical_end = desc->physical_start + desc->number_of_pages * kUEFIPageSize;
+        if (IsAvailable(static_cast<MemoryType>(desc->type))) {
+            available_end = physical_end;
+        } else {
+            g_memory_manager->MarkAllocated(
+                FrameID{desc->physical_start / kBytesPerFrame},
+                desc->number_of_pages * kUEFIPageSize / kBytesPerFrame);
         }
     }
+    g_memory_manager->SetMemoryRange(FrameID{1}, FrameID{available_end / kBytesPerFrame});
+    Log(kWarn, "available_end: %p\n", available_end);
 
     // マウスカーソル描画
     g_mouse_cursor = new (g_mouse_cursor_buf) MouseCursor{

@@ -56,5 +56,6 @@ inline bool IsAvailable(MemoryType type) {
            type == MemoryType::kEfiConventionalMemory;
 }
 
+/// UEFIページは4KiB
 const int kUEFIPageSize = 4096;
 #endif

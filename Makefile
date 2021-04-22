@@ -22,4 +22,4 @@ run: default
 
 .PHONY: setup
 setup:
-	./scripts/setup.sh
+	./tools/setup.sh
