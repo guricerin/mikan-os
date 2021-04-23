@@ -1,4 +1,4 @@
-# mikan-os
+# mikanos
 
 [WIP]  
 [『ゼロからのOS自作入門』](https://zero.osdev.jp/)の写経。写経元のソースコードは[こちら](https://github.com/uchan-nos/mikanos)。  

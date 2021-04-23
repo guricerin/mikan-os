@@ -51,7 +51,7 @@ BitmapMemoryManager* g_memory_manager;
 unsigned int g_mouse_layer_id;
 
 void MouseObserver(int8_t displacement_x, int8_t displacement_y) {
-    g_layer_manager->MoveRelative({displacement_x, displacement_y});
+    g_layer_manager->MoveRelative(g_mouse_layer_id, {displacement_x, displacement_y});
     g_layer_manager->Draw();
 }
 
@@ -109,12 +109,12 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
         break;
     }
 
-    const int frame_width = frame_buffer_config.horizontal_resolution;
-    const int frame_height = frame_buffer_config.vertical_resolution;
     // ピクセル描画
     DrawDesktop(*g_pixel_writer);
 
-    g_console = new (g_console_buf) Console{*g_pixel_writer, g_desktop_fg_color, g_desktop_bg_color};
+    // メモリマネージャーやレイヤーマネージャーを生成する前のデバッグ情報を表示したいので、それらより前に生成
+    g_console = new (g_console_buf) Console{kDesktopFGColor, kDesktopBGColor};
+    g_console->SetWriter(g_pixel_writer);
     printk("Welcome to MikanOS!\n");
     SetLogLevel(kWarn);
 
@@ -161,10 +161,6 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
             err.Name(), err.File(), err.Line());
         exit(1);
     }
-
-    // マウスカーソル描画
-    g_mouse_cursor = new (g_mouse_cursor_buf) MouseCursor{
-        g_pixel_writer, g_desktop_bg_color, {300, 200}};
 
     std::array<Message, 32> main_queue_data;
     ArrayQueue<Message> main_queue(main_queue_data);
@@ -256,6 +252,39 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
             }
         }
     }
+
+    // GUI
+    const int frame_width = frame_buffer_config.horizontal_resolution;
+    const int frame_height = frame_buffer_config.vertical_resolution;
+
+    // 背景ウィンドウ
+    auto bg_window = std::make_shared<Window>(frame_width, frame_height);
+    auto bg_writer = bg_window->Writer();
+    DrawDesktop(*bg_writer);
+    // レイヤーマネージャーの準備が整ったので、コンソールをレイヤーの仕組みに載せ替える
+    g_console->SetWriter(bg_writer);
+
+    // マウスカーソル描画
+    auto mouse_window = std::make_shared<Window>(kMouseCursorWidth, kMouseCursorHeight);
+    mouse_window->SetTransparentColor(kMouseTransparentColor);
+    DrawMouseCursor(mouse_window->Writer(), {0, 0});
+
+    g_layer_manager = new LayerManager;
+    g_layer_manager->SetWriter(g_pixel_writer);
+
+    auto bg_layer_id = g_layer_manager->NewLayer()
+                           .SetWindow(bg_window)
+                           .Move({0, 0})
+                           .ID();
+
+    g_mouse_layer_id = g_layer_manager->NewLayer()
+                           .SetWindow(mouse_window)
+                           .Move({200, 200})
+                           .ID();
+
+    g_layer_manager->UpDown(bg_layer_id, 0);
+    g_layer_manager->UpDown(g_mouse_layer_id, 1);
+    g_layer_manager->Draw();
 
     // 割り込みイベントループ
     while (1) {
