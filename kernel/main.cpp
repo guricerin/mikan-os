@@ -43,6 +43,12 @@ int printk(const char* format, ...) {
     int result = vsprintf(s, format, ap);
     va_end(ap);
 
+    StartLAPICTimer();
+    g_console->PutString(s);
+    auto elapsed = LAPICTimerElapsed();
+    StopLAPICTimer();
+
+    sprintf(s, "[%9d]", elapsed);
     g_console->PutString(s);
     return result;
 }
@@ -271,7 +277,7 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
     auto bg_writer = bg_window->Writer();
     DrawDesktop(*bg_writer);
     // レイヤーマネージャーの準備が整ったので、コンソールをレイヤーの仕組みに載せ替える
-    g_console->SetWriter(bg_writer);
+    g_console->SetWindow(bg_window);
 
     // マウスカーソル描画
     auto mouse_window = std::make_shared<Window>(kMouseCursorWidth, kMouseCursorHeight, frame_buffer_config.pixel_format);

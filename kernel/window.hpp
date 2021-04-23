@@ -47,6 +47,9 @@ public:
     int Width() const;
     int Height() const;
 
+    /// このウィンドウの平面領域内で、矩形領域を移動する
+    void Move(Vector2D<int> dst_pos, const Rectangle<int>& src);
+
 private:
     int width_, height_;
     std::vector<std::vector<PixelColor>> data_{};

@@ -12,7 +12,9 @@
 class FrameBuffer {
 public:
     Error Initailize(const FrameBufferConfig& config);
-    Error Copy(Vector2D<int> pos, const FrameBuffer& src);
+    Error Copy(Vector2D<int> dst_pos, const FrameBuffer& src);
+    /// このウィンドウの平面領域内で、矩形領域を移動する
+    void Move(Vector2D<int> dst_pos, const Rectangle<int>& src);
     FrameBufferWriter& Writer() { return *writer_; };
 
 private:
@@ -21,6 +23,3 @@ private:
     std::vector<uint8_t> buffer_{};
     std::unique_ptr<FrameBufferWriter> writer_{};
 };
-
-/// 1ピクセルあたりのビット数を計算
-int BitsPerPixel(PixelFormat format);
