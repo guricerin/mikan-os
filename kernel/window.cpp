@@ -1,28 +1,38 @@
 #include "window.hpp"
 
-Window::Window(int width, int height) : width_{width}, height_{height} {
+#include "logger.hpp"
+
+Window::Window(int width, int height, PixelFormat shadow_format) : width_{width}, height_{height} {
     data_.resize(height);
     for (int y = 0; y < height; y++) {
         data_[y].resize(width);
     }
+
+    FrameBufferConfig fb_config{};
+    fb_config.frame_buffer = nullptr;
+    fb_config.horizontal_resolution = width;
+    fb_config.vertical_resolution = height;
+    fb_config.pixel_format = shadow_format;
+
+    if (auto err = shadow_buffer_.Initailize(fb_config)) {
+        Log(kError, "failed to initialize shadow buffer: %s at %s:%d\n",
+            err.Name(), err.File(), err.Line());
+    }
 }
 
-void Window::DrawTo(PixelWriter& writer, Vector2D<int> position) {
+void Window::DrawTo(FrameBuffer& dst, Vector2D<int> position) {
     if (!transparent_color_) {
-        for (int y = 0; y < Height(); y++) {
-            for (int x = 0; x < Width(); x++) {
-                writer.Write(position.x + x, position.y + y, At(x, y));
-            }
-        }
+        dst.Copy(position, shadow_buffer_);
         return;
     }
 
     const auto tc = transparent_color_.value();
+    auto& writer = dst.Writer();
     for (int y = 0; y < Height(); y++) {
         for (int x = 0; x < Width(); x++) {
-            const auto color = At(x, y);
+            const auto color = At(Vector2D<int>{x, y});
             if (color != tc) {
-                writer.Write(position.x + x, position.y + y, color);
+                writer.Write(position + Vector2D<int>{x, y}, color);
             }
         }
     }
@@ -37,11 +47,13 @@ Window::WindowWriter* Window::Writer() {
 }
 
 /// 指定した位置のピクセルを返す
-PixelColor& Window::At(int x, int y) {
-    return data_[y][x];
+const PixelColor& Window::At(Vector2D<int> pos) const {
+    return data_[pos.y][pos.x];
 }
-const PixelColor& Window::At(int x, int y) const {
-    return data_[y][x];
+
+void Window::Write(Vector2D<int> pos, PixelColor color) {
+    data_[pos.y][pos.x] = color;
+    shadow_buffer_.Writer().Write(pos, color);
 }
 
 int Window::Width() const {

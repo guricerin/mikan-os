@@ -9,6 +9,7 @@
 #include "asmfunc.h"
 #include "console.hpp"
 #include "font.hpp"
+#include "frame_buffer.hpp"
 #include "frame_buffer_config.hpp"
 #include "graphics.hpp"
 #include "interrupt.hpp"
@@ -266,19 +267,26 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
     const int frame_height = frame_buffer_config.vertical_resolution;
 
     // 背景ウィンドウ
-    auto bg_window = std::make_shared<Window>(frame_width, frame_height);
+    auto bg_window = std::make_shared<Window>(frame_width, frame_height, frame_buffer_config.pixel_format);
     auto bg_writer = bg_window->Writer();
     DrawDesktop(*bg_writer);
     // レイヤーマネージャーの準備が整ったので、コンソールをレイヤーの仕組みに載せ替える
     g_console->SetWriter(bg_writer);
 
     // マウスカーソル描画
-    auto mouse_window = std::make_shared<Window>(kMouseCursorWidth, kMouseCursorHeight);
+    auto mouse_window = std::make_shared<Window>(kMouseCursorWidth, kMouseCursorHeight, frame_buffer_config.pixel_format);
     mouse_window->SetTransparentColor(kMouseTransparentColor);
     DrawMouseCursor(mouse_window->Writer(), {0, 0});
 
+    // 本物のフレームバッファー
+    FrameBuffer screen;
+    if (auto err = screen.Initailize(frame_buffer_config)) {
+        Log(kError, "failed to initialize frame buffer: %s at %s:%d\n",
+            err.Name(), err.File(), err.Line());
+    }
+
     g_layer_manager = new LayerManager;
-    g_layer_manager->SetWriter(g_pixel_writer);
+    g_layer_manager->SetWriter(&screen);
 
     auto bg_layer_id = g_layer_manager->NewLayer()
                            .SetWindow(bg_window)

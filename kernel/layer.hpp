@@ -28,8 +28,8 @@ public:
     /// レイヤーの位置情報を指定の相対座標へと更新。再描画はしない
     Layer& MoveRelative(Vector2D<int> pos_diff);
 
-    /// writerに設定されているウィンドウの内容を描画
-    void DrawTo(PixelWriter& writer) const;
+    /// 指定の描画先にウィンドウの内容を描画
+    void DrawTo(FrameBuffer& screen) const;
 
 private:
     unsigned int id_;
@@ -41,7 +41,7 @@ private:
 /// 複数のレイヤーを管理する
 class LayerManager {
 public:
-    void SetWriter(PixelWriter* writer);
+    void SetWriter(FrameBuffer* screen);
 
     /// 新しいレイヤーを生成して参照を返す
     /// そのレイヤーの実体はLayerManager内部のコンテナで保持される
@@ -65,7 +65,7 @@ public:
     void Hide(unsigned int id);
 
 private:
-    PixelWriter* writer_{nullptr};
+    FrameBuffer* screen_{nullptr};
     std::vector<std::unique_ptr<Layer>> layers_{};
     /// 配列の先頭を再背面、末尾を最前面とする。非表示レイヤは含まない
     std::vector<Layer*> layer_stack_{};
