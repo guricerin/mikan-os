@@ -21,6 +21,7 @@
 #include "pci.hpp"
 #include "queue.hpp"
 #include "segment.hpp"
+#include "timer.hpp"
 #include "usb/classdriver/mouse.hpp"
 #include "usb/device.hpp"
 #include "usb/memory.hpp"
@@ -52,7 +53,11 @@ unsigned int g_mouse_layer_id;
 
 void MouseObserver(int8_t displacement_x, int8_t displacement_y) {
     g_layer_manager->MoveRelative(g_mouse_layer_id, {displacement_x, displacement_y});
+    StartLAPICTimer();
     g_layer_manager->Draw();
+    auto elapsed = LAPICTimerElapsed();
+    StopLAPICTimer();
+    printk("MouseObserver: elapsed = %u\n", elapsed);
 }
 
 void SwitchEhci2Xhci(const pci::Device& xhc_device) {
@@ -112,11 +117,14 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
     // ピクセル描画
     DrawDesktop(*g_pixel_writer);
 
-    // メモリマネージャーやレイヤーマネージャーを生成する前のデバッグ情報を表示したいので、それらより前に生成
+    // メモリマネージャーやレイヤーマネージャーを生成する前のデバッグ情報を表示したいので、それらより前にコンソールを生成
     g_console = new (g_console_buf) Console{kDesktopFGColor, kDesktopBGColor};
     g_console->SetWriter(g_pixel_writer);
     printk("Welcome to MikanOS!\n");
     SetLogLevel(kWarn);
+
+    // タイマの初期化
+    InitializeLAPICTimer();
 
     // セグメントの設定（GDTを再構築）
     SetupSegments();
