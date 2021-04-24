@@ -27,6 +27,7 @@ void DrawRectangle(PixelWriter& writer, const Vector2D<int>& pos, const Vector2D
     }
 }
 
+/// 描画領域塗りつぶし
 void FillRectangle(PixelWriter& writer, const Vector2D<int>& pos, const Vector2D<int>& size, const PixelColor& color) {
     for (int dy = 0; dy < size.y; dy++) {
         for (int dx = 0; dx < size.x; dx++) {

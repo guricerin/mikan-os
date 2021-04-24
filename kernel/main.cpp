@@ -286,6 +286,11 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
     DrawMouseCursor(mouse_window->Writer(), {0, 0});
     g_mouse_position = {200, 200};
 
+    auto main_window = std::make_shared<Window>(160, 80, frame_buffer_config.pixel_format);
+    DrawWindow(*main_window->Writer(), "Hello Window");
+    WriteString(*main_window->Writer(), {24, 28}, "Welcome to", {0, 0, 0});
+    WriteString(*main_window->Writer(), {24, 44}, "MikanOS world!", {0, 0, 0});
+
     // 本物のフレームバッファー
     FrameBuffer screen;
     if (auto err = screen.Initailize(frame_buffer_config)) {
@@ -305,9 +310,14 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
                            .SetWindow(mouse_window)
                            .Move(g_mouse_position)
                            .ID();
+    auto main_window_layer_id = g_layer_manager->NewLayer()
+                                    .SetWindow(main_window)
+                                    .Move({300, 100})
+                                    .ID();
 
     g_layer_manager->UpDown(bg_layer_id, 0);
     g_layer_manager->UpDown(g_mouse_layer_id, 1);
+    g_layer_manager->UpDown(main_window_layer_id, 1);
     g_layer_manager->Draw();
 
     // 割り込みイベントループ

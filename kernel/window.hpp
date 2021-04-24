@@ -60,3 +60,6 @@ private:
     /// 本命のメモリ領域には最適化されたmemcpyで後で一気に書き込む
     FrameBuffer shadow_buffer_{};
 };
+
+/// 窓を描画
+void DrawWindow(PixelWriter& writer, const char* title);
