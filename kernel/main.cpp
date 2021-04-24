@@ -57,14 +57,16 @@ char g_memory_manager_buf[sizeof(BitmapMemoryManager)];
 BitmapMemoryManager* g_memory_manager;
 
 unsigned int g_mouse_layer_id;
+Vector2D<int> g_screen_size;
+Vector2D<int> g_mouse_position;
 
 void MouseObserver(int8_t displacement_x, int8_t displacement_y) {
-    g_layer_manager->MoveRelative(g_mouse_layer_id, {displacement_x, displacement_y});
-    StartLAPICTimer();
+    // マウスの移動範囲を画面内に制限
+    auto new_pos = g_mouse_position + Vector2D<int>{displacement_x, displacement_y};
+    new_pos = ElementMin(new_pos, g_screen_size + Vector2D<int>{-1, -1});
+    g_mouse_position = ElementMax(new_pos, {0, 0});
+    g_layer_manager->Move(g_mouse_layer_id, g_mouse_position);
     g_layer_manager->Draw();
-    auto elapsed = LAPICTimerElapsed();
-    StopLAPICTimer();
-    printk("MouseObserver: elapsed = %u\n", elapsed);
 }
 
 void SwitchEhci2Xhci(const pci::Device& xhc_device) {
@@ -169,7 +171,6 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
         }
     }
     g_memory_manager->SetMemoryRange(FrameID{1}, FrameID{available_end / kBytesPerFrame});
-    Log(kWarn, "available_end: %p\n", available_end);
 
     if (auto err = InitializeHeap(*g_memory_manager)) {
         Log(kError, "failed to allocate pages: %s at %s:%d",
@@ -269,11 +270,11 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
     }
 
     // GUI
-    const int frame_width = frame_buffer_config.horizontal_resolution;
-    const int frame_height = frame_buffer_config.vertical_resolution;
+    g_screen_size.x = frame_buffer_config.horizontal_resolution;
+    g_screen_size.y = frame_buffer_config.vertical_resolution;
 
     // 背景ウィンドウ
-    auto bg_window = std::make_shared<Window>(frame_width, frame_height, frame_buffer_config.pixel_format);
+    auto bg_window = std::make_shared<Window>(g_screen_size.x, g_screen_size.y, frame_buffer_config.pixel_format);
     auto bg_writer = bg_window->Writer();
     DrawDesktop(*bg_writer);
     // レイヤーマネージャーの準備が整ったので、コンソールをレイヤーの仕組みに載せ替える
@@ -283,6 +284,7 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
     auto mouse_window = std::make_shared<Window>(kMouseCursorWidth, kMouseCursorHeight, frame_buffer_config.pixel_format);
     mouse_window->SetTransparentColor(kMouseTransparentColor);
     DrawMouseCursor(mouse_window->Writer(), {0, 0});
+    g_mouse_position = {200, 200};
 
     // 本物のフレームバッファー
     FrameBuffer screen;
@@ -301,7 +303,7 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
 
     g_mouse_layer_id = g_layer_manager->NewLayer()
                            .SetWindow(mouse_window)
-                           .Move({200, 200})
+                           .Move(g_mouse_position)
                            .ID();
 
     g_layer_manager->UpDown(bg_layer_id, 0);
