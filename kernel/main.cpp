@@ -43,12 +43,6 @@ int printk(const char* format, ...) {
     int result = vsprintf(s, format, ap);
     va_end(ap);
 
-    StartLAPICTimer();
-    g_console->PutString(s);
-    auto elapsed = LAPICTimerElapsed();
-    StopLAPICTimer();
-
-    sprintf(s, "[%9d]", elapsed);
     g_console->PutString(s);
     return result;
 }
@@ -286,10 +280,8 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
     DrawMouseCursor(mouse_window->Writer(), {0, 0});
     g_mouse_position = {200, 200};
 
-    auto main_window = std::make_shared<Window>(160, 80, frame_buffer_config.pixel_format);
+    auto main_window = std::make_shared<Window>(160, 52, frame_buffer_config.pixel_format);
     DrawWindow(*main_window->Writer(), "Hello Window");
-    WriteString(*main_window->Writer(), {24, 28}, "Welcome to", {0, 0, 0});
-    WriteString(*main_window->Writer(), {24, 44}, "MikanOS world!", {0, 0, 0});
 
     // 本物のフレームバッファー
     FrameBuffer screen;
@@ -320,14 +312,22 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
     g_layer_manager->UpDown(main_window_layer_id, 1);
     g_layer_manager->Draw();
 
+    char str[128];
+    unsigned int count = 0;
     // 割り込みイベントループ
     while (1) {
+        count++;
+        sprintf(str, "%010u", count);
+        FillRectangle(*main_window->Writer(), {24, 28}, {8 * 10, 16}, {0xc6, 0xc6, 0xc6});
+        WriteString(*main_window->Writer(), {24, 28}, str, {0, 0, 0});
+        g_layer_manager->Draw();
+
         // clear interrupt : 割り込みを無効化
         // データ競合の回避（キューの操作中に割り込みさせない）
         __asm__("cli");
         if (main_queue.Count() == 0) {
             // set interrupt : 割り込みを有効化
-            __asm__("sti\n\thlt");
+            __asm__("sti");
             // 割り込みが発生すると、この次の行（ここではcontinue）から処理を再開
             continue;
         }
