@@ -60,7 +60,6 @@ void MouseObserver(int8_t displacement_x, int8_t displacement_y) {
     new_pos = ElementMin(new_pos, g_screen_size + Vector2D<int>{-1, -1});
     g_mouse_position = ElementMax(new_pos, {0, 0});
     g_layer_manager->Move(g_mouse_layer_id, g_mouse_position);
-    g_layer_manager->Draw();
 }
 
 void SwitchEhci2Xhci(const pci::Device& xhc_device) {
@@ -208,11 +207,10 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
     }
 
     // IDTをCPUに登録
-    const uint16_t cs = GetCS();
     SetIDTEntry(g_idt[InterruptVector::kXHCI],
                 MakeIDTAttr(DescriptorType::kInterruptGate, 0),
                 reinterpret_cast<uint64_t>(IntHandlerXHCI),
-                cs);
+                kernel_cs);
     LoadIDT(sizeof(g_idt) - 1, reinterpret_cast<uintptr_t>(&g_idt[0]));
 
     // MSI割り込みを有効化
@@ -271,8 +269,6 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
     auto bg_window = std::make_shared<Window>(g_screen_size.x, g_screen_size.y, frame_buffer_config.pixel_format);
     auto bg_writer = bg_window->Writer();
     DrawDesktop(*bg_writer);
-    // レイヤーマネージャーの準備が整ったので、コンソールをレイヤーの仕組みに載せ替える
-    g_console->SetWindow(bg_window);
 
     // マウスカーソル描画
     auto mouse_window = std::make_shared<Window>(kMouseCursorWidth, kMouseCursorHeight, frame_buffer_config.pixel_format);
@@ -282,6 +278,10 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
 
     auto main_window = std::make_shared<Window>(160, 52, frame_buffer_config.pixel_format);
     DrawWindow(*main_window->Writer(), "Hello Window");
+
+    auto console_window = std::make_shared<Window>(Console::kColumns * 8, Console::kRows * 16, frame_buffer_config.pixel_format);
+    // レイヤーマネージャーの準備が整ったので、コンソールをレイヤーの仕組みに載せ替える
+    g_console->SetWindow(console_window);
 
     // 本物のフレームバッファー
     FrameBuffer screen;
@@ -306,11 +306,17 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
                                     .SetWindow(main_window)
                                     .Move({300, 100})
                                     .ID();
+    g_console->SetLayerID(g_layer_manager->NewLayer()
+                              .SetWindow(console_window)
+                              .Move({0, 0})
+                              .ID());
 
     g_layer_manager->UpDown(bg_layer_id, 0);
-    g_layer_manager->UpDown(g_mouse_layer_id, 1);
-    g_layer_manager->UpDown(main_window_layer_id, 1);
-    g_layer_manager->Draw();
+    g_layer_manager->UpDown(g_console->LayerID(), 1);
+    g_layer_manager->UpDown(main_window_layer_id, 2);
+    g_layer_manager->UpDown(g_mouse_layer_id, 3);
+    // 初回の描画は画面全体を対象にする
+    g_layer_manager->Draw(bg_layer_id);
 
     char str[128];
     unsigned int count = 0;
@@ -320,7 +326,8 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
         sprintf(str, "%010u", count);
         FillRectangle(*main_window->Writer(), {24, 28}, {8 * 10, 16}, {0xc6, 0xc6, 0xc6});
         WriteString(*main_window->Writer(), {24, 28}, str, {0, 0, 0});
-        g_layer_manager->Draw();
+        // カウンタの表示はメインウィンドウだを再描画
+        g_layer_manager->Draw(main_window_layer_id);
 
         // clear interrupt : 割り込みを無効化
         // データ競合の回避（キューの操作中に割り込みさせない）

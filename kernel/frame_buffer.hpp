@@ -12,7 +12,7 @@
 class FrameBuffer {
 public:
     Error Initailize(const FrameBufferConfig& config);
-    Error Copy(Vector2D<int> dst_pos, const FrameBuffer& src);
+    Error Copy(Vector2D<int> dst_pos, const FrameBuffer& src, const Rectangle<int>& src_area);
     /// このウィンドウの平面領域内で、矩形領域を移動する
     void Move(Vector2D<int> dst_pos, const Rectangle<int>& src);
     FrameBufferWriter& Writer() { return *writer_; };

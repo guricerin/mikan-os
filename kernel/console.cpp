@@ -21,7 +21,7 @@ void Console::PutString(const char* s) {
         s++;
     }
     if (g_layer_manager) {
-        g_layer_manager->Draw();
+        g_layer_manager->Draw(layer_id_);
     }
 }
 
@@ -41,6 +41,14 @@ void Console::SetWindow(const std::shared_ptr<Window>& window) {
     window_ = window;
     writer_ = window_->Writer();
     Refresh();
+}
+
+void Console::SetLayerID(unsigned int layer_id) {
+    layer_id_ = layer_id;
+}
+
+unsigned int Console::LayerID() const {
+    return layer_id_;
 }
 
 void Console::NewLine() {
@@ -68,6 +76,7 @@ void Console::NewLine() {
 }
 
 void Console::Refresh() {
+    FillRectangle(*writer_, {0, 0}, {8 * kColumns, 16 * kRows}, bg_color_);
     for (int row = 0; row < kRows; row++) {
         WriteString(*writer_, Vector2D<int>{0, 16 * row}, buffer_[row], fg_color_);
     }
