@@ -68,6 +68,9 @@ public:
     /// レイヤーを非表示にする
     void Hide(unsigned int id);
 
+    /// 指定座標にウィンドウをもつ最前面のレイヤーを取得
+    Layer* FindLayerByPosition(Vector2D<int> pos, unsigned int exclude_id) const;
+
 private:
     FrameBuffer* screen_{nullptr};
     /// ダブルバッファリング用

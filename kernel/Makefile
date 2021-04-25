@@ -26,7 +26,7 @@ $(TARGET): $(OBJS) Makefile
 	ld.lld $(LDFLAGS) -o $(TARGET) $(OBJS) -lc -lc++ -lc++abi
 
 %.o: %.cpp Makefile
-	clang++ $(CPPFLAGS) $(CXXFLAGS) -o $@ -c $<
+	clang++ $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@
 
 .%.d: %.cpp
 	clang++ $(CPPFLAGS) $(CXXFLAGS) -MM $< > $@

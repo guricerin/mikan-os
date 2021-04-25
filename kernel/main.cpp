@@ -54,12 +54,35 @@ unsigned int g_mouse_layer_id;
 Vector2D<int> g_screen_size;
 Vector2D<int> g_mouse_position;
 
-void MouseObserver(int8_t displacement_x, int8_t displacement_y) {
+void MouseObserver(uint8_t buttons, int8_t displacement_x, int8_t displacement_y) {
+    static unsigned int mouse_drag_layer_id = 0;
+    static uint8_t previous_buttons = 0;
+
+    const auto old_pos = g_mouse_position;
     // マウスの移動範囲を画面内に制限
     auto new_pos = g_mouse_position + Vector2D<int>{displacement_x, displacement_y};
     new_pos = ElementMin(new_pos, g_screen_size + Vector2D<int>{-1, -1});
     g_mouse_position = ElementMax(new_pos, {0, 0});
     g_layer_manager->Move(g_mouse_layer_id, g_mouse_position);
+
+    // マウスカーソルの移動量
+    const auto pos_diff = g_mouse_position - old_pos;
+    const bool previous_left_pressed = (previous_buttons & 0x01);
+    const bool left_pressed = (buttons & 0x01);
+    if (!previous_left_pressed && left_pressed) { // 左クリック
+        auto layer = g_layer_manager->FindLayerByPosition(g_mouse_position, g_mouse_layer_id);
+        if (layer) {
+            mouse_drag_layer_id = layer->ID();
+        }
+    } else if (previous_left_pressed && left_pressed) { // ドラッグ中
+        if (mouse_drag_layer_id > 0) {
+            g_layer_manager->MoveRelative(mouse_drag_layer_id, pos_diff);
+        }
+    } else if (previous_left_pressed && !left_pressed) { // 離した
+        mouse_drag_layer_id = 0;
+    }
+
+    previous_buttons = buttons;
 }
 
 void SwitchEhci2Xhci(const pci::Device& xhc_device) {
