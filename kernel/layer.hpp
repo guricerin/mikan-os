@@ -43,7 +43,7 @@ private:
 /// 複数のレイヤーを管理する
 class LayerManager {
 public:
-    void SetWriter(FrameBuffer* screen);
+    void SetScreen(FrameBuffer* screen);
 
     /// 新しいレイヤーを生成して参照を返す
     /// そのレイヤーの実体はLayerManager内部のコンテナで保持される
@@ -70,6 +70,9 @@ public:
 
 private:
     FrameBuffer* screen_{nullptr};
+    /// ダブルバッファリング用
+    /// mutable修飾子はconstメソッド内からでも変更可能
+    mutable FrameBuffer back_buffer_{};
     std::vector<std::unique_ptr<Layer>> layers_{};
     /// 配列の先頭を再背面、末尾を最前面とする。非表示レイヤは含まない
     std::vector<Layer*> layer_stack_{};

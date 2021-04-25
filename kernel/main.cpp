@@ -291,7 +291,7 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
     }
 
     g_layer_manager = new LayerManager;
-    g_layer_manager->SetWriter(&screen);
+    g_layer_manager->SetScreen(&screen);
 
     auto bg_layer_id = g_layer_manager->NewLayer()
                            .SetWindow(bg_window)
