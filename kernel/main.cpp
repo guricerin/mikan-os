@@ -71,7 +71,7 @@ void MouseObserver(uint8_t buttons, int8_t displacement_x, int8_t displacement_y
     const bool left_pressed = (buttons & 0x01);
     if (!previous_left_pressed && left_pressed) { // 左クリック
         auto layer = g_layer_manager->FindLayerByPosition(g_mouse_position, g_mouse_layer_id);
-        if (layer) {
+        if (layer && layer->IsDraggable()) {
             mouse_drag_layer_id = layer->ID();
         }
     } else if (previous_left_pressed && left_pressed) { // ドラッグ中
@@ -327,6 +327,7 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
                            .ID();
     auto main_window_layer_id = g_layer_manager->NewLayer()
                                     .SetWindow(main_window)
+                                    .SetDraggable(true)
                                     .Move({300, 100})
                                     .ID();
     g_console->SetLayerID(g_layer_manager->NewLayer()

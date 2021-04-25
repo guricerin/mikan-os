@@ -24,6 +24,8 @@ public:
     std::shared_ptr<Window> GetWindow() const;
     /// レイヤーの原点座標を取得
     Vector2D<int> GetPosition() const;
+    Layer& SetDraggable(bool draggable);
+    bool IsDraggable() const;
 
     /// レイヤーの位置情報を指定の絶対座標へと更新。再描画はしない
     Layer& Move(Vector2D<int> pos);
@@ -38,6 +40,8 @@ private:
     /// 原点座標
     Vector2D<int> pos_;
     std::shared_ptr<Window> window_;
+    // true : マウスドラッグ可能
+    bool draggable_{false};
 };
 
 /// 複数のレイヤーを管理する
