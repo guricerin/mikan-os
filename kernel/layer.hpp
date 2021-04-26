@@ -38,8 +38,8 @@ public:
 private:
     unsigned int id_;
     /// 原点座標
-    Vector2D<int> pos_;
-    std::shared_ptr<Window> window_;
+    Vector2D<int> pos_{};
+    std::shared_ptr<Window> window_{};
     // true : マウスドラッグ可能
     bool draggable_{false};
 };
@@ -90,3 +90,6 @@ private:
 };
 
 extern LayerManager* g_layer_manager;
+
+/// 背景とコンソールをレイヤー上に構築
+void InitializeLayer();

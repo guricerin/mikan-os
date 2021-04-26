@@ -2,6 +2,9 @@
 
 #include <algorithm>
 
+#include "console.hpp"
+#include "logger.hpp"
+
 Layer::Layer(unsigned int id) : id_{id} {}
 
 unsigned int Layer::ID() const {
@@ -170,4 +173,44 @@ Layer* LayerManager::FindLayer(unsigned int id) {
     return it->get();
 }
 
+namespace {
+    /// 本物のフレームバッファー
+    FrameBuffer* g_screen;
+} // namespace
+
 LayerManager* g_layer_manager;
+
+void InitializeLayer() {
+    const auto screen_size = ScreenSize();
+
+    // 背景ウィンドウ
+    auto bg_window = std::make_shared<Window>(screen_size.x, screen_size.y, g_screen_config.pixel_format);
+    DrawDesktop(*bg_window->Writer());
+
+    // コンソール
+    auto console_window = std::make_shared<Window>(Console::kColumns * 8, Console::kRows * 16, g_screen_config.pixel_format);
+    // レイヤーマネージャーの準備が整ったので、コンソールをレイヤーの仕組みに載せ替える
+    g_console->SetWindow(console_window);
+
+    g_screen = new FrameBuffer;
+    if (auto err = g_screen->Initailize(g_screen_config)) {
+        Log(kError, "failed to initialize frame buffer: %s at %s:%d\n",
+            err.Name(), err.File(), err.Line());
+        exit(1);
+    }
+
+    g_layer_manager = new LayerManager;
+    g_layer_manager->SetScreen(g_screen);
+
+    auto bg_layer_id = g_layer_manager->NewLayer()
+                           .SetWindow(bg_window)
+                           .Move({0, 0})
+                           .ID();
+    g_console->SetLayerID(g_layer_manager->NewLayer()
+                              .SetWindow(console_window)
+                              .Move({0, 0})
+                              .ID());
+
+    g_layer_manager->UpDown(bg_layer_id, 0);
+    g_layer_manager->UpDown(g_console->LayerID(), 1);
+}

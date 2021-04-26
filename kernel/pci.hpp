@@ -1,6 +1,5 @@
-/** 
- * pciバス制御
- */
+/// PCI : Peripheral Component Interconnect
+/// マザーボードと周辺機器を繋ぐための規格
 
 #pragma once
 
@@ -167,3 +166,5 @@ namespace pci {
         MSITriggerMode trigger_mode, MSIDeliveryMode delivery_mode,
         uint8_t vector, unsigned int num_vector_exponent);
 } // namespace pci
+
+void InitializePCI();

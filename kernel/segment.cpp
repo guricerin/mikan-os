@@ -44,7 +44,7 @@ void SetDataSegment(SegmentDescriptor& desc,
     desc.bits.default_operation_size = 1;
 }
 
-/// GDT再構築
+/// セグメントの設定（GDTを再構築）
 void SetupSegments() {
     // null descriptor（GDTの0番目は使用されない）
     g_gdt[0].data = 0;
@@ -52,4 +52,12 @@ void SetupSegments() {
     SetDataSegment(g_gdt[2], DescriptorType::kReadWrite, 0, 0, 0xfffff);
     // g_gdtを正式なGDTとしてCPUに登録
     LoadGDT(sizeof(g_gdt) - 1, reinterpret_cast<uintptr_t>(&g_gdt[0]));
+}
+
+void InitializeSegmentation() {
+    SetupSegments();
+
+    // ヌルディスクリプタにする
+    SetDSAll(kKernelDS);
+    SetCSSS(kKernelCS, kKernelSS);
 }

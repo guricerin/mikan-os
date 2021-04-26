@@ -47,3 +47,33 @@ void DrawDesktop(PixelWriter& writer) {
     // 左下のメニューアイコンっぽい図形
     DrawRectangle(writer, {10, height - 40}, {30, 30}, {160, 160, 160});
 }
+
+FrameBufferConfig g_screen_config;
+PixelWriter* g_screen_writer;
+
+Vector2D<int> ScreenSize() {
+    return {
+        static_cast<int>(g_screen_config.horizontal_resolution),
+        static_cast<int>(g_screen_config.vertical_resolution)};
+}
+
+namespace {
+    char g_pixel_writer_buf[sizeof(RGBResv8BitPerColorPixelWriter)];
+}
+
+void InitializeGraphics(const FrameBufferConfig& screen_config) {
+    ::g_screen_config = screen_config;
+
+    switch (g_screen_config.pixel_format) {
+    case kPixelRGBResv8BitPerColor:
+        ::g_screen_writer = new (g_pixel_writer_buf) RGBResv8BitPerColorPixelWriter{g_screen_config};
+        break;
+    case kPixelBGRResv8BitPerColor:
+        ::g_screen_writer = new (g_pixel_writer_buf) BGRResv8BitPerColorPixelWriter{g_screen_config};
+        break;
+    default:
+        exit(1);
+    }
+
+    DrawDesktop(*g_screen_writer);
+}

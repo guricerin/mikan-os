@@ -4,7 +4,9 @@
 
 #include <array>
 #include <cstdint>
+#include <deque>
 
+#include "message.hpp"
 #include "x86_descriptor.hpp"
 
 union InterruptDescriptorAttribute {
@@ -73,3 +75,5 @@ void SetIDTEntry(InterruptDescriptor& desc,
                  uint16_t segment_selector);
 
 void NotifyEndOfInterrupt();
+
+void InitializeInterrupt(std::deque<Message>* msg_queue);

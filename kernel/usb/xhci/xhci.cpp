@@ -2,7 +2,9 @@
 
 #include <cstring>
 
+#include "interrupt.hpp"
 #include "logger.hpp"
+#include "pci.hpp"
 #include "usb/descriptor.hpp"
 #include "usb/device.hpp"
 #include "usb/setupdata.hpp"
@@ -311,6 +313,28 @@ namespace {
                  !r.bits.hc_os_owned_semaphore);
         Log(kDebug, "OS has owned xHC\n");
     }
+
+    void SwitchEhci2Xhci(const pci::Device& xhc_device) {
+        bool intel_ehc_exist = false;
+        for (int i = 0; i < pci::g_num_device; ++i) {
+            if (pci::g_devices[i].class_code.Match(0x0cu, 0x03u, 0x20u) /* EHCI */ &&
+                pci::ReadVendorId(pci::g_devices[i]) == 0x8086) {
+                intel_ehc_exist = true;
+                break;
+            }
+        }
+        if (!intel_ehc_exist) {
+            return;
+        }
+
+        uint32_t superspeed_ports = pci::ReadConfReg(xhc_device, 0xdc); // USB3PRM
+        pci::WriteConfReg(xhc_device, 0xd8, superspeed_ports);          // USB3_PSSEN
+        uint32_t ehci2xhci_ports = pci::ReadConfReg(xhc_device, 0xd4);  // XUSB2PRM
+        pci::WriteConfReg(xhc_device, 0xd0, ehci2xhci_ports);           // XUSB2PR
+        Log(kDebug, "SwitchEhci2Xhci: SS = %02, xHCI = %02x\n",
+            superspeed_ports, ehci2xhci_ports);
+    }
+
 } // namespace
 
 namespace usb::xhci {
@@ -511,5 +535,84 @@ namespace usb::xhci {
         xhc.PrimaryEventRing()->Pop();
 
         return err;
+    }
+
+    Controller* g_controller;
+
+    void Initialize() {
+        // intel製を優先してxHCを探す
+        pci::Device* xhc_device = nullptr;
+        for (int i = 0; i < pci::g_num_device; i++) {
+            if (pci::g_devices[i].class_code.Match(0x0cu, 0x03u, 0x30u)) {
+                xhc_device = &pci::g_devices[i];
+
+                if (pci::ReadVendorId(*xhc_device) == 0x8086) {
+                    break;
+                }
+            }
+        }
+        if (xhc_device) {
+            Log(kInfo, "xHC has been found: %d.%d.%d\n",
+                xhc_device->bus, xhc_device->device, xhc_device->function);
+        } else {
+            Log(kError, "Error! xHC has been not found: %d.%d.%d\n",
+                xhc_device->bus, xhc_device->device, xhc_device->function);
+        }
+
+        // MSI割り込みを有効化
+        // このプログラムが動作しているCPUコア（Bootstrap Processor）の固有番号
+        const uint8_t bsp_local_apic_id = *reinterpret_cast<const uint32_t*>(0xfee00020) >> 24;
+        pci::ConfigureMSIFixedDestination(
+            *xhc_device, bsp_local_apic_id,
+            pci::MSITriggerMode::kLevel, pci::MSIDeliveryMode::kFixed,
+            InterruptVector::kXHCI, 0);
+
+        // xHCを制御するレジスタ群はメモリマップドIOなので、そのアドレスを取得
+        const WithError<uint64_t> xhc_bar = pci::ReadBar(*xhc_device, 0);
+        Log(kDebug, "ReadBar: %s\n", xhc_bar.error.Name());
+        const uint64_t xhc_mmio_base = xhc_bar.value & ~static_cast<uint64_t>(0xf);
+        Log(kDebug, "xHC mmio_base = %08lx\n", xhc_mmio_base);
+
+        // xHC初期化
+        usb::xhci::g_controller = new Controller{xhc_mmio_base};
+        Controller& xhc = *usb::xhci::g_controller;
+
+        if (pci::ReadVendorId(*xhc_device) == 0x8086) {
+            Log(kDebug, "%s, %d\n", __FILE__, __LINE__);
+            SwitchEhci2Xhci(*xhc_device);
+        } else {
+            Log(kDebug, "%s, %d\n", __FILE__, __LINE__);
+        }
+        if (auto err = xhc.Initialize()) {
+            Log(kInfo, "xhc.Initialize: %s\n", err.Name());
+            exit(1);
+        }
+
+        // xHC起動
+        Log(kInfo, "xHC starting\n");
+        xhc.Run();
+
+        // すべてのUSBポートを探索し、何かが接続されているポートの設定を行う
+        for (int i = 1; i <= xhc.MaxPorts(); i++) {
+            auto port = xhc.PortAt(i);
+            Log(kDebug, "Port %d: IsConnected=%d\n", i, port.IsConnected());
+
+            if (port.IsConnected()) {
+                if (auto err = ConfigurePort(xhc, port)) {
+                    Log(kError, "failed to configure port: %s at %s:%d\n",
+                        err.Name(), err.File(), err.Line());
+                    continue;
+                }
+            }
+        }
+    }
+
+    void ProcessEvents() {
+        while (g_controller->PrimaryEventRing()->HasFront()) {
+            if (auto err = ProcessEvent(*g_controller)) {
+                Log(kError, "Error while ProcessEvent: %s at %s:%d\n",
+                    err.Name(), err.File(), err.Line());
+            }
+        }
     }
 } // namespace usb::xhci

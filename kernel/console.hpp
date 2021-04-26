@@ -27,3 +27,6 @@ private:
     void NewLine();
     void Refresh();
 };
+
+extern Console* g_console;
+void InitializeConsole();
