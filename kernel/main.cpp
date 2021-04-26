@@ -1,16 +1,15 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
-
 #include <deque>
 #include <limits>
 #include <numeric>
 #include <vector>
 
+#include "acpi.hpp"
 #include "asmfunc.h"
 #include "console.hpp"
 #include "font.hpp"
-#include "frame_buffer.hpp"
 #include "frame_buffer_config.hpp"
 #include "graphics.hpp"
 #include "interrupt.hpp"
@@ -22,13 +21,8 @@
 #include "mouse.hpp"
 #include "paging.hpp"
 #include "pci.hpp"
-#include "queue.hpp"
 #include "segment.hpp"
 #include "timer.hpp"
-#include "usb/classdriver/mouse.hpp"
-#include "usb/device.hpp"
-#include "usb/memory.hpp"
-#include "usb/xhci/trb.hpp"
 #include "usb/xhci/xhci.hpp"
 #include "window.hpp"
 
@@ -64,7 +58,8 @@ alignas(16) uint8_t g_kernel_main_stack[1024 * 1024];
 
 // ブートローダからフレームバッファの情報とメモリマップを受け取る
 extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
-                                   const MemoryMap& memory_map) {
+                                   const MemoryMap& memory_map,
+                                   const acpi::RSDP& acpi_table) {
     // GUI
     InitializeGraphics(frame_buffer_config);
     // メモリマネージャーやレイヤーマネージャーを生成する前のデバッグ情報を表示したいので、それらより前にコンソールを生成
@@ -93,9 +88,10 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
     g_layer_manager->Draw({{0, 0}, ScreenSize()});
 
     // タイマ
+    acpi::Initialize(acpi_table);
     InitializeLAPICTimer(*g_main_queue);
-    g_timer_manager->AddTimer(Timer(2, 2));
-    g_timer_manager->AddTimer(Timer(10, -1));
+    g_timer_manager->AddTimer(Timer(200, 2));
+    g_timer_manager->AddTimer(Timer(600, -1));
 
     char str[128];
     // 割り込みイベントループ
@@ -133,7 +129,7 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
             printk("Timer: timeout = %lu, value = %d\n",
                    msg.arg.timer.timeout, msg.arg.timer.value);
             if (msg.arg.timer.value > 0) {
-                g_timer_manager->AddTimer(Timer(msg.arg.timer.timeout + 1, msg.arg.timer.value + 1));
+                g_timer_manager->AddTimer(Timer(msg.arg.timer.timeout + 100, msg.arg.timer.value + 1));
             }
             break;
         default:

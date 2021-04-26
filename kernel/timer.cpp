@@ -22,7 +22,7 @@ void InitializeLAPICTimer(std::deque<Message>& msg_queue) {
     // 割り込み許可
     // Current Counter レジスタの値が0になるたびに割り込み発生
     g_lvt_timer = (0b010 << 16) | InterruptVector::kLAPICTimer;
-    g_initial_count = kCountMax;
+    g_initial_count = 0x1000000u;
 }
 
 void StartLAPICTimer() {

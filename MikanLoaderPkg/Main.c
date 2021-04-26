@@ -323,8 +323,7 @@ EFI_STATUS EFIAPI UefiMain(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE* system_tab
         }
     }
 
-    // カーネル起動
-    UINT64 entry_addr = *(UINT64*)(kernel_first_addr + 24);
+    // 画面情報
     struct FrameBufferConfig frame_buffer_config = {
         (UINT8*)gop->Mode->FrameBufferBase,
         gop->Mode->Info->PixelsPerScanLine,
@@ -342,11 +341,25 @@ EFI_STATUS EFIAPI UefiMain(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE* system_tab
         Print(L"Unimplemented pixel format: %d\n", gop->Mode->Info->PixelFormat);
         Halt();
     }
+
+    // UEFI BIOSからRSDP(Root System Description Pointer)を取得
+    VOID* acpi_table = NULL;
+    for (UINTN i = 0; i < system_table->NumberOfTableEntries; i++) {
+        if (CompareGuid(&gEfiAcpiTableGuid,
+                        &system_table->ConfigurationTable[i].VendorGuid)) { // 2つのGUIDが等しい
+            acpi_table = system_table->ConfigurationTable[i].VendorTable;
+            break;
+        }
+    }
+
+    // カーネル起動
+    UINT64 entry_addr = *(UINT64*)(kernel_first_addr + 24);
     // エントリーポイントをC言語の関数として解釈させる
     typedef void EntryPointType(const struct FrameBufferConfig*,
-                                const struct MemoryMap*);
+                                const struct MemoryMap*,
+                                const VOID*);
     EntryPointType* entry_point = (EntryPointType*)entry_addr;
-    entry_point(&frame_buffer_config, &memmap);
+    entry_point(&frame_buffer_config, &memmap, acpi_table);
 
     // エントリーポイント呼び出しが上手くいけば、以下は実行されないはず
     Print(L"All done\n");
