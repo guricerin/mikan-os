@@ -92,8 +92,8 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
     // 初回の描画は画面全体を対象にする
     g_layer_manager->Draw({{0, 0}, ScreenSize()});
 
-    // タイマの初期化
-    // InitializeLAPICTimer();
+    // タイマ
+    InitializeLAPICTimer();
 
     char str[128];
     unsigned int count = 0;
@@ -123,6 +123,9 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
         switch (msg.type) {
         case Message::kInterruptXHCI:
             usb::xhci::ProcessEvents();
+            break;
+        case Message::kInterruptLAPCITimer:
+            printk("Timer interrupt\n");
             break;
         default:
             Log(kError, "Unknown message type: %d\n", msg.type);

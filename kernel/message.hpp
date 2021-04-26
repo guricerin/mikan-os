@@ -4,5 +4,6 @@
 struct Message {
     enum Type {
         kInterruptXHCI,
+        kInterruptLAPCITimer,
     } type;
 };

@@ -30,6 +30,12 @@ namespace {
         g_msg_queue->push_back(Message{Message::kInterruptXHCI});
         NotifyEndOfInterrupt();
     }
+
+    /// LAPCIタイマ用割り込みハンドラ
+    __attribute__((interrupt)) void IntHandlerLAPCITimer(InterruptFrame* frame) {
+        g_msg_queue->push_back(Message{Message::kInterruptLAPCITimer});
+        NotifyEndOfInterrupt();
+    }
 } // namespace
 
 void InitializeInterrupt(std::deque<Message>* msg_queue) {
@@ -39,6 +45,10 @@ void InitializeInterrupt(std::deque<Message>* msg_queue) {
     SetIDTEntry(g_idt[InterruptVector::kXHCI],
                 MakeIDTAttr(DescriptorType::kInterruptGate, 0),
                 reinterpret_cast<uint64_t>(IntHandlerXHCI),
+                kKernelCS);
+    SetIDTEntry(g_idt[InterruptVector::kLAPICTimer],
+                MakeIDTAttr(DescriptorType::kInterruptGate, 0),
+                reinterpret_cast<uint64_t>(IntHandlerLAPCITimer),
                 kKernelCS);
     LoadIDT(sizeof(g_idt) - 1, reinterpret_cast<uintptr_t>(&g_idt[0]));
 }

@@ -36,10 +36,12 @@ struct InterruptDescriptor {
     uint32_t reserved;
 } __attribute__((packed));
 
+/// 割り込みベクタ番号（割り込み要因番号、割り込みベクトル）
 class InterruptVector {
 public:
     enum Number {
         kXHCI = 0x40,
+        kLAPICTimer = 0x41,
     };
 };
 

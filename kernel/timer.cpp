@@ -1,5 +1,7 @@
 #include "timer.hpp"
 
+#include "interrupt.hpp"
+
 namespace {
     const uint32_t kCountMax = 0xffffffffu;
     /// Local APICタイマのレジスタ
@@ -14,8 +16,11 @@ namespace {
 } // namespace
 
 void InitializeLAPICTimer() {
-    g_divide_config = 0b1011;         // divide 1:1
-    g_lvt_timer = (0b001 << 16) | 32; // 割り込み不許可。単発モード（1回タイムアウトしたらタイマ動作が終了）
+    g_divide_config = 0b1011; // divide 1:1
+    // 割り込み許可
+    // Current Counter レジスタの値が0になるたびに割り込み発生
+    g_lvt_timer = (0b010 << 16) | InterruptVector::kLAPICTimer;
+    g_initial_count = kCountMax;
 }
 
 void StartLAPICTimer() {
