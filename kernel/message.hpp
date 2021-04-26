@@ -4,6 +4,13 @@
 struct Message {
     enum Type {
         kInterruptXHCI,
-        kInterruptLAPCITimer,
+        kTimerTimeout,
     } type;
+
+    union {
+        struct {
+            unsigned long timeout;
+            int value;
+        } timer;
+    } arg;
 };

@@ -93,7 +93,9 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
     g_layer_manager->Draw({{0, 0}, ScreenSize()});
 
     // タイマ
-    InitializeLAPICTimer();
+    InitializeLAPICTimer(*g_main_queue);
+    g_timer_manager->AddTimer(Timer(2, 2));
+    g_timer_manager->AddTimer(Timer(10, -1));
 
     char str[128];
     // 割り込みイベントループ
@@ -127,8 +129,12 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
         case Message::kInterruptXHCI:
             usb::xhci::ProcessEvents();
             break;
-        case Message::kInterruptLAPCITimer:
-            printk("Timer interrupt\n");
+        case Message::kTimerTimeout:
+            printk("Timer: timeout = %lu, value = %d\n",
+                   msg.arg.timer.timeout, msg.arg.timer.value);
+            if (msg.arg.timer.value > 0) {
+                g_timer_manager->AddTimer(Timer(msg.arg.timer.timeout + 1, msg.arg.timer.value + 1));
+            }
             break;
         default:
             Log(kError, "Unknown message type: %d\n", msg.type);
