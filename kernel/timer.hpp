@@ -10,3 +10,18 @@ void InitializeLAPICTimer();
 void StartLAPICTimer();
 uint32_t LAPICTimerElapsed();
 void StopLAPICTimer();
+
+/// タイマの割り込み回数を管理
+class TimerManager {
+public:
+    void Tick();
+    unsigned long CurrentTick() const { return tick_; }
+
+private:
+    // タイマ割り込み回数
+    volatile unsigned long tick_{0};
+};
+
+extern TimerManager* g_timer_manager;
+
+void LAPICTimerOnInterrupt();

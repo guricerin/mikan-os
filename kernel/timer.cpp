@@ -16,6 +16,8 @@ namespace {
 } // namespace
 
 void InitializeLAPICTimer() {
+    g_timer_manager = new TimerManager;
+
     g_divide_config = 0b1011; // divide 1:1
     // 割り込み許可
     // Current Counter レジスタの値が0になるたびに割り込み発生
@@ -33,4 +35,14 @@ uint32_t LAPICTimerElapsed() {
 
 void StopLAPICTimer() {
     g_initial_count = 0;
+}
+
+void TimerManager::Tick() {
+    tick_++;
+}
+
+TimerManager* g_timer_manager;
+
+void LAPICTimerOnInterrupt() {
+    g_timer_manager->Tick();
 }

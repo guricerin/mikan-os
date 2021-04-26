@@ -2,6 +2,7 @@
 
 #include "asmfunc.h"
 #include "segment.hpp"
+#include "timer.hpp"
 
 std::array<InterruptDescriptor, 256> g_idt;
 
@@ -33,7 +34,7 @@ namespace {
 
     /// LAPCIタイマ用割り込みハンドラ
     __attribute__((interrupt)) void IntHandlerLAPCITimer(InterruptFrame* frame) {
-        g_msg_queue->push_back(Message{Message::kInterruptLAPCITimer});
+        LAPICTimerOnInterrupt();
         NotifyEndOfInterrupt();
     }
 } // namespace

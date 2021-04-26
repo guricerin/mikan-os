@@ -96,22 +96,25 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
     InitializeLAPICTimer();
 
     char str[128];
-    unsigned int count = 0;
     // 割り込みイベントループ
     while (1) {
-        count++;
-        sprintf(str, "%010u", count);
+        // データ競合回避のため、タイマ割り込み回数の取得処理中は割り込みを無効化
+        __asm__("cli");
+        const auto tick = g_timer_manager->CurrentTick();
+        __asm__("sti");
+
+        sprintf(str, "%010lu", tick);
         FillRectangle(*g_main_window->Writer(), {24, 28}, {8 * 10, 16}, {0xc6, 0xc6, 0xc6});
         WriteString(*g_main_window->Writer(), {24, 28}, str, {0, 0, 0});
-        // カウンタの表示はメインウィンドウだを再描画
+        // カウンタの表示はメインウィンドウだけを再描画
         g_layer_manager->Draw(g_main_window_layer_id);
 
         // clear interrupt : 割り込みを無効化
-        // データ競合の回避（キューの操作中に割り込みさせない）
+        // データ競合の回避のため（キューの操作中に割り込みさせない）
         __asm__("cli");
         if (g_main_queue->size() == 0) {
             // set interrupt : 割り込みを有効化
-            __asm__("sti");
+            __asm__("sti\t\nhlt");
             // 割り込みが発生すると、この次の行（ここではcontinue）から処理を再開
             continue;
         }
