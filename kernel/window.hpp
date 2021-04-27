@@ -65,3 +65,5 @@ private:
 
 /// 窓を描画
 void DrawWindow(PixelWriter& writer, const char* title);
+
+void DrawTextbox(PixelWriter& writer, Vector2D<int> pos, Vector2D<int> size);

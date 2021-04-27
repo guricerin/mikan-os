@@ -100,14 +100,6 @@ namespace {
         ".$$$$$$$$$$$$$$@",
         "@@@@@@@@@@@@@@@@",
     };
-
-    constexpr PixelColor ToColor(uint32_t c) {
-        // rgbの順
-        return {
-            static_cast<uint8_t>((c >> 16) & 0xff),
-            static_cast<uint8_t>((c >> 8) & 0xff),
-            static_cast<uint8_t>(c & 0xff)};
-    }
 } // namespace
 
 void DrawWindow(PixelWriter& writer, const char* title) {
@@ -144,4 +136,19 @@ void DrawWindow(PixelWriter& writer, const char* title) {
             writer.Write({win_w - 5 - kCloseButtonWidth + x, 5 + y}, color);
         }
     }
+}
+
+void DrawTextbox(PixelWriter& writer, Vector2D<int> pos, Vector2D<int> size) {
+    auto fill_rect = [&writer](Vector2D<int> pos, Vector2D<int> size, uint32_t color) {
+        FillRectangle(writer, pos, size, ToColor(color));
+    };
+
+    // fill main box
+    fill_rect(pos + Vector2D<int>{1, 1}, size + Vector2D<int>{2, 2}, 0xffffff);
+
+    // draw border line
+    fill_rect(pos, {size.x, 1}, 0x848484);
+    fill_rect(pos, {1, size.y}, 0x848484);
+    fill_rect(pos + Vector2D<int>{0, size.y}, {size.x, 1}, 0xc6c6c6);
+    fill_rect(pos + Vector2D<int>{size.x, 0}, {1, size.y}, 0xc6c6c6);
 }

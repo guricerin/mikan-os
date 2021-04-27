@@ -52,6 +52,47 @@ void InitializeMainWindow() {
     g_layer_manager->UpDown(g_main_window_layer_id, std::numeric_limits<int>::max());
 }
 
+std::shared_ptr<Window> g_text_window;
+unsigned int g_text_window_layer_id;
+void InitializeTextWindow() {
+    const int win_w = 160;
+    const int win_h = 52;
+
+    g_text_window = std::make_shared<Window>(win_w, win_h, g_screen_config.pixel_format);
+    DrawWindow(*g_text_window->Writer(), "Text Box Test");
+    DrawTextbox(*g_text_window->Writer(), {4, 24}, {win_w - 8, win_h - 24 - 4});
+
+    g_text_window_layer_id = g_layer_manager->NewLayer()
+                                 .SetWindow(g_text_window)
+                                 .SetDraggable(true)
+                                 .Move({350, 200})
+                                 .ID();
+
+    g_layer_manager->UpDown(g_text_window_layer_id, std::numeric_limits<int>::max());
+}
+
+// テキストボックスに現在表示している文字数
+int g_text_window_index;
+void InputTextWindow(char input) {
+    if (input == 0) {
+        return;
+    }
+
+    auto pos = []() { return Vector2D<int>{8 + 8 * g_text_window_index, 24 + 6}; };
+
+    const int max_chars = (g_text_window->Width() - 16) / 8;
+    // 入力がバックスペースなら削除
+    if (input == '\b' && g_text_window_index > 0) {
+        g_text_window_index--;
+        FillRectangle(*g_text_window->Writer(), pos(), {8, 16}, ToColor(0xffffff));
+    } else if (input >= ' ' && g_text_window_index < max_chars) {
+        WriteAscii(*g_text_window->Writer(), pos(), input, ToColor(0));
+        g_text_window_index++;
+    }
+
+    g_layer_manager->Draw(g_text_window_layer_id);
+}
+
 /// 割り込みキュー
 std::deque<Message>* g_main_queue;
 
@@ -84,6 +125,7 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
     // GUIレイヤー
     InitializeLayer();
     InitializeMainWindow();
+    InitializeTextWindow();
     InitializeMouse();
     // 初回の描画は画面全体を対象にする
     g_layer_manager->Draw({{0, 0}, ScreenSize()});
@@ -135,9 +177,7 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
             }
             break;
         case Message::kKeyPush:
-            if (msg.arg.keyboard.ascii != 0) {
-                printk("%c", msg.arg.keyboard.ascii);
-            }
+            InputTextWindow(msg.arg.keyboard.ascii);
             break;
         default:
             Log(kError, "Unknown message type: %d\n", msg.type);
