@@ -73,6 +73,13 @@ void InitializeTextWindow() {
 
 // テキストボックスに現在表示している文字数
 int g_text_window_index;
+
+void DrawTextCursor(bool visible) {
+    const auto color = visible ? ToColor(0) : ToColor(0xffffff);
+    const auto pos = Vector2D<int>{8 + 8 * g_text_window_index, 24 + 5};
+    FillRectangle(*g_text_window->Writer(), pos, {7, 15}, color);
+}
+
 void InputTextWindow(char input) {
     if (input == 0) {
         return;
@@ -83,11 +90,15 @@ void InputTextWindow(char input) {
     const int max_chars = (g_text_window->Width() - 16) / 8;
     // 入力がバックスペースなら削除
     if (input == '\b' && g_text_window_index > 0) {
+        DrawTextCursor(false);
         g_text_window_index--;
         FillRectangle(*g_text_window->Writer(), pos(), {8, 16}, ToColor(0xffffff));
+        DrawTextCursor(true);
     } else if (input >= ' ' && g_text_window_index < max_chars) {
+        DrawTextCursor(false);
         WriteAscii(*g_text_window->Writer(), pos(), input, ToColor(0));
         g_text_window_index++;
+        DrawTextCursor(true);
     }
 
     g_layer_manager->Draw(g_text_window_layer_id);
@@ -137,6 +148,15 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
     // キーボード
     InitializeKeyboard(*g_main_queue);
 
+    // テキストボックスのカーソル点滅
+    const int kTextboxCursorTimer = 1;
+    const int kTimer05sec = static_cast<int>(kTimerFreq * 0.5);
+    __asm__("cli");
+    // 0,5secでタイムアウトするタイマ
+    g_timer_manager->AddTimer(Timer{kTimer05sec, kTextboxCursorTimer});
+    __asm__("sti");
+    bool textbox_cursor_visible = false;
+
     char str[128];
     // 割り込みイベントループ
     while (1) {
@@ -170,10 +190,14 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
             usb::xhci::ProcessEvents();
             break;
         case Message::kTimerTimeout:
-            printk("Timer: timeout = %lu, value = %d\n",
-                   msg.arg.timer.timeout, msg.arg.timer.value);
-            if (msg.arg.timer.value > 0) {
-                g_timer_manager->AddTimer(Timer(msg.arg.timer.timeout + 100, msg.arg.timer.value + 1));
+            // カーソル点滅タイマがタイムアウトした場合
+            if (msg.arg.timer.value == kTextboxCursorTimer) {
+                __asm__("cli");
+                g_timer_manager->AddTimer(Timer{msg.arg.timer.timeout + kTimer05sec, kTextboxCursorTimer});
+                __asm__("sti");
+                textbox_cursor_visible = !textbox_cursor_visible;
+                DrawTextCursor(textbox_cursor_visible);
+                g_layer_manager->Draw(g_text_window_layer_id);
             }
             break;
         case Message::kKeyPush:
