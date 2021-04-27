@@ -13,6 +13,7 @@
 #include "frame_buffer_config.hpp"
 #include "graphics.hpp"
 #include "interrupt.hpp"
+#include "keyboard.hpp"
 #include "layer.hpp"
 #include "logger.hpp"
 #include "memory_manager.hpp"
@@ -90,8 +91,9 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
     // タイマ
     acpi::Initialize(acpi_table);
     InitializeLAPICTimer(*g_main_queue);
-    g_timer_manager->AddTimer(Timer(200, 2));
-    g_timer_manager->AddTimer(Timer(600, -1));
+
+    // キーボード
+    InitializeKeyboard(*g_main_queue);
 
     char str[128];
     // 割り込みイベントループ
@@ -130,6 +132,11 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
                    msg.arg.timer.timeout, msg.arg.timer.value);
             if (msg.arg.timer.value > 0) {
                 g_timer_manager->AddTimer(Timer(msg.arg.timer.timeout + 100, msg.arg.timer.value + 1));
+            }
+            break;
+        case Message::kKeyPush:
+            if (msg.arg.keyboard.ascii != 0) {
+                printk("%c", msg.arg.keyboard.ascii);
             }
             break;
         default:
