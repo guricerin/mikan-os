@@ -1,5 +1,6 @@
 #include "timer.hpp"
 
+#include "acpi.hpp"
 #include "interrupt.hpp"
 
 namespace {
@@ -19,10 +20,24 @@ void InitializeLAPICTimer(std::deque<Message>& msg_queue) {
     g_timer_manager = new TimerManager(msg_queue);
 
     g_divide_config = 0b1011; // divide 1:1
+    // 割り込み不許可
+    g_lvt_timer = (0b010 << 16);
+
+    StartLAPICTimer();
+    // 100msec(0.1sec)待機
+    acpi::WaitMillisecondes(100);
+    const auto elapsed = LAPICTimerElapsed();
+    StopLAPICTimer();
+
+    // 1000msec(1sec)当たりのカウント数
+    g_lapic_timer_freq = static_cast<unsigned long>(elapsed) * 10;
+
+    g_divide_config = 0b1011; // divide 1:1
     // 割り込み許可
     // Current Counter レジスタの値が0になるたびに割り込み発生
     g_lvt_timer = (0b010 << 16) | InterruptVector::kLAPICTimer;
-    g_initial_count = 0x1000000u;
+    // 約10msecごとに割り込みが発生するはず
+    g_initial_count = g_lapic_timer_freq / kTimerFreq;
 }
 
 void StartLAPICTimer() {
@@ -70,6 +85,7 @@ void TimerManager::AddTimer(const Timer& timer) {
 }
 
 TimerManager* g_timer_manager;
+unsigned long g_lapic_timer_freq;
 
 void LAPICTimerOnInterrupt() {
     g_timer_manager->Tick();

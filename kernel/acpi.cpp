@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <cstring>
 
+#include "asmfunc.h"
 #include "logger.hpp"
 
 namespace {
@@ -98,5 +99,23 @@ namespace acpi {
             Log(kError, "FADT is not found\n");
             exit(1);
         }
+    }
+
+    void WaitMillisecondes(unsigned long msec) {
+        // PMタイマのビット幅が32bit : true, 24bit : false
+        const bool pm_timer_32 = (g_fadt->flags >> 8) & 1;
+        // 現在のPMタイマのカウント値
+        const uint32_t start = IoIn32(g_fadt->pm_tmr_blk);
+        uint32_t end = start + kPMTimerFreq * msec / 1000;
+        if (!pm_timer_32) {
+            end &= 0x00ffffffu;
+        }
+
+        if (end < start) { // endのoverflow対策
+            while (IoIn32(g_fadt->pm_tmr_blk) >= start)
+                ;
+        }
+        while (IoIn32(g_fadt->pm_tmr_blk) < end)
+            ;
     }
 } // namespace acpi

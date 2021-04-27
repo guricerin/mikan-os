@@ -50,5 +50,9 @@ private:
 };
 
 extern TimerManager* g_timer_manager;
+/// Local APICタイマの周波数（1秒あたりのカウント数）
+extern unsigned long g_lapic_timer_freq;
+/// 1秒間にTimerManager::Tick()をコールする回数
+const int kTimerFreq = 100;
 
 void LAPICTimerOnInterrupt();

@@ -74,6 +74,11 @@ namespace acpi {
     } __attribute__((packed));
 
     extern const FADT* g_fadt;
+    /// ACPI PMタイマの周波数 : 3.579545MHz
+    /// 24ビットカウンタなら約4.7秒で1周して0になる
+    const int kPMTimerFreq = 3579545;
 
     void Initialize(const RSDP& rsdp);
+    /// 指定したミリ秒が経過するのを待機
+    void WaitMillisecondes(unsigned long msec);
 } // namespace acpi
