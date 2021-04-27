@@ -1,3 +1,4 @@
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -104,6 +105,46 @@ void InputTextWindow(char input) {
     g_layer_manager->Draw(g_text_window_layer_id);
 }
 
+std::shared_ptr<Window> g_task_b_window;
+unsigned int g_task_b_window_layer_id;
+void InitializeTaskBWindow() {
+    g_task_b_window = std::make_shared<Window>(160, 52, g_screen_config.pixel_format);
+    DrawWindow(*g_task_b_window->Writer(), "TaskB Window");
+
+    g_task_b_window_layer_id = g_layer_manager->NewLayer()
+                                   .SetWindow(g_task_b_window)
+                                   .SetDraggable(true)
+                                   .Move({100, 100})
+                                   .ID();
+
+    g_layer_manager->UpDown(g_task_b_window_layer_id, std::numeric_limits<int>::max());
+}
+
+/// コンテクストの切替時に値の保存と復帰に必要なレジスタをすべて含む
+struct TaskContext {
+    uint64_t cr3, rip, rflags, reserved;             // offset 0x00
+    uint64_t cs, ss, fs, gs;                         // offset 0x20
+    uint64_t rax, rbx, rcx, rdx, rdi, rsi, rsp, rbp; // offset 0x40
+    uint64_t r8, r9, r19, r11, r12, r13, r14, r15;   // offset 0x80
+    std::array<uint8_t, 512> fxsave_area;            // offset 0xc0
+} __attribute__((packed));
+
+alignas(16) TaskContext g_task_b_ctx, g_task_a_ctx;
+
+void TaskB(int task_id, int data) {
+    printk("Task: task_id=%d, data=%d\n", task_id, data);
+    char str[128];
+    int count = 0;
+    while (true) {
+        count++;
+        sprintf(str, "%010d", count);
+        FillRectangle(*g_task_b_window->Writer(), {24, 28}, {8 * 10, 16}, {0xc6, 0xc6, 0xc6});
+        WriteString(*g_task_b_window->Writer(), {24, 28}, str, {0, 0, 0});
+        g_layer_manager->Draw(g_task_b_window_layer_id);
+
+        SwitchContext(&g_task_a_ctx, &g_task_b_ctx);
+    }
+}
 /// 割り込みキュー
 std::deque<Message>* g_main_queue;
 
@@ -137,6 +178,7 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
     InitializeLayer();
     InitializeMainWindow();
     InitializeTextWindow();
+    InitializeTaskBWindow();
     InitializeMouse();
     // 初回の描画は画面全体を対象にする
     g_layer_manager->Draw({{0, 0}, ScreenSize()});
@@ -157,6 +199,25 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
     __asm__("sti");
     bool textbox_cursor_visible = false;
 
+    // タスクB
+    // 8KiB
+    std::vector<uint64_t> task_b_stack(1024);
+    uint64_t task_b_stack_end = reinterpret_cast<uint64_t>(&task_b_stack[1024]);
+
+    memset(&g_task_b_ctx, 0, sizeof(g_task_b_ctx));
+    g_task_b_ctx.rip = reinterpret_cast<uint64_t>(TaskB);
+    g_task_b_ctx.rdi = 1;
+    g_task_b_ctx.rsi = 42;
+
+    g_task_b_ctx.cr3 = GetCR3();
+    g_task_b_ctx.rflags = 0x202;
+    g_task_b_ctx.cs = kKernelCS;
+    g_task_b_ctx.ss = kKernelSS;
+    g_task_b_ctx.rsp = (task_b_stack_end & ~0xflu) - 8;
+
+    // <XCSRのすべての例外をマスクする
+    *reinterpret_cast<uint32_t*>(&g_task_b_ctx.fxsave_area[24]) = 0x1f80;
+
     char str[128];
     // 割り込みイベントループ
     while (1) {
@@ -176,7 +237,8 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
         __asm__("cli");
         if (g_main_queue->size() == 0) {
             // set interrupt : 割り込みを有効化
-            __asm__("sti\t\nhlt");
+            __asm__("sti");
+            SwitchContext(&g_task_b_ctx, &g_task_a_ctx);
             // 割り込みが発生すると、この次の行（ここではcontinue）から処理を再開
             continue;
         }

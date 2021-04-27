@@ -16,4 +16,7 @@ void SetCSSS(uint16_t cs, uint16_t ss);
 void SetDSAll(uint16_t value);
 /// CR3レジスタを設定し、自前の階層ページング構造が利用可能となる
 void SetCR3(uint64_t value);
+uint64_t GetCR3();
+/// コンテキストを切り替える
+void SwitchContext(void* next_ctx, void* current_ctx);
 }
