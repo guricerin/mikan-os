@@ -33,8 +33,23 @@ TaskContext& Task::Context() {
     return context_;
 }
 
+uint64_t Task::ID() const {
+    return id_;
+}
+
+Task& Task::Sleep() {
+    g_task_manager->Sleep(this);
+    return *this;
+}
+
+Task& Task::Wakeup() {
+    g_task_manager->Wakeup(this);
+    return *this;
+}
+
 TaskManager::TaskManager() {
-    NewTask();
+    // 番兵
+    running_.push_back(&NewTask());
 }
 
 Task& TaskManager::NewTask() {
@@ -42,18 +57,62 @@ Task& TaskManager::NewTask() {
     return *tasks_.emplace_back(new Task(latest_id_));
 }
 
-void TaskManager::SwitchTask() {
-    size_t next_task_index = current_task_index_ + 1;
-    // タスク配列を1周
-    if (next_task_index >= tasks_.size()) {
-        next_task_index = 0;
+void TaskManager::SwitchTask(bool current_sleep) {
+    Task* current_task = running_.front();
+    running_.pop_front();
+    if (!current_sleep) {
+        running_.push_back(current_task);
+    }
+    Task* next_task = running_.front();
+
+    SwitchContext(&next_task->Context(), &current_task->Context());
+}
+
+void TaskManager::Sleep(Task* task) {
+    auto it = std::find(running_.begin(), running_.end(), task);
+
+    // タスクが実行中の場合
+    if (it == running_.begin()) {
+        SwitchTask(true);
+        return;
     }
 
-    Task& current_task = *tasks_[current_task_index_];
-    Task& next_task = *tasks_[next_task_index];
-    current_task_index_ = next_task_index;
+    if (it == running_.end()) {
+        return;
+    }
 
-    SwitchContext(&next_task.Context(), &current_task.Context());
+    running_.erase(it);
+}
+
+Error TaskManager::Sleep(uint64_t id) {
+    auto it = std::find_if(tasks_.begin(),
+                           tasks_.end(),
+                           [id](const auto& t) { return t->ID() == id; });
+    if (it == tasks_.end()) {
+        return MAKE_ERROR(Error::kNoSuchTask);
+    }
+
+    Sleep(it->get());
+    return MAKE_ERROR(Error::kSuccess);
+}
+
+void TaskManager::Wakeup(Task* task) {
+    auto it = std::find(running_.begin(), running_.end(), task);
+    if (it == running_.end()) {
+        running_.push_back(task);
+    }
+}
+
+Error TaskManager::Wakeup(uint64_t id) {
+    auto it = std::find_if(tasks_.begin(),
+                           tasks_.end(),
+                           [id](const auto& t) { return t->ID() == id; });
+    if (it == tasks_.end()) {
+        return MAKE_ERROR(Error::kNoSuchTask);
+    }
+
+    Wakeup(it->get());
+    return MAKE_ERROR(Error::kSuccess);
 }
 
 TaskManager* g_task_manager;

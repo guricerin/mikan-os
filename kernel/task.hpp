@@ -5,10 +5,13 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <vector>
 
+#include "error.hpp"
+
 /// コンテキスト : タスクの実行バイナリ、コマンドライン引数、環境変数、スタックメモリ、各レジスタの値など
-/// コンテクストの切替時に値の保存と復帰に必要なレジスタをすべて含む
+/// コンテキストの切替時に値の保存と復帰に必要なレジスタをすべて含む
 struct TaskContext {
     uint64_t cr3, rip, rflags, reserved;             // offset 0x00
     uint64_t cs, ss, fs, gs;                         // offset 0x20
@@ -28,6 +31,9 @@ public:
     /// f : 実際に実行されるタスク（関数）
     Task& InitContext(TaskFunc* f, int64_t data);
     TaskContext& Context();
+    uint64_t ID() const;
+    Task& Sleep();
+    Task& Wakeup();
 
 private:
     uint64_t id_;
@@ -40,16 +46,26 @@ private:
 class TaskManager {
 public:
     TaskManager();
+    /// 待機列には追加しない
     Task& NewTask();
-    void SwitchTask();
+    void SwitchTask(bool current_sleep = false);
+
+    /// タスクをスリープ状態にする（待機列から除外）
+    void Sleep(Task* task);
+    Error Sleep(uint64_t id);
+
+    /// タスクを実行可能状態にする（待機列に復帰）
+    void Wakeup(Task* task);
+    Error Wakeup(uint64_t id);
 
 private:
     /// タスク一覧
     std::vector<std::unique_ptr<Task>> tasks_{};
     /// 最後に生成されたタスクのID
     uint64_t latest_id_{0};
-    /// 現在実行中のタスク（tasks_のインデックス用）
-    size_t current_task_index_{0};
+    /// タスクの待機列（ランキュー）
+    /// 先頭を現在実行中のタスクとする
+    std::deque<Task*> running_{};
 };
 
 extern TaskManager* g_task_manager;

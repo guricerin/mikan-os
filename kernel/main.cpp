@@ -195,9 +195,16 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
 
     // マルチタスク
     InitializeTask();
-    g_task_manager->NewTask().InitContext(TaskB, 45);
-    g_task_manager->NewTask().InitContext(TaskIdle, 0xdeadbeef);
-    g_task_manager->NewTask().InitContext(TaskIdle, 0xcafebabe);
+    const uint64_t taskb_id = g_task_manager->NewTask()
+                                  .InitContext(TaskB, 45)
+                                  .Wakeup()
+                                  .ID();
+    g_task_manager->NewTask()
+        .InitContext(TaskIdle, 0xdeadbeef)
+        .Wakeup();
+    g_task_manager->NewTask()
+        .InitContext(TaskIdle, 0xcafebabe)
+        .Wakeup();
 
     char str[128];
     // 割り込みイベントループ
@@ -244,6 +251,11 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
             break;
         case Message::kKeyPush:
             InputTextWindow(msg.arg.keyboard.ascii);
+            if (msg.arg.keyboard.ascii == 's') {
+                printk("sleep TaskB: %s\n", g_task_manager->Sleep(taskb_id).Name());
+            } else if (msg.arg.keyboard.ascii == 'w') {
+                printk("wakeup TaskB: %s\n", g_task_manager->Wakeup(taskb_id).Name());
+            }
             break;
         default:
             Log(kError, "Unknown message type: %d\n", msg.type);
