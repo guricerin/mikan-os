@@ -121,8 +121,8 @@ void InitializeTaskBWindow() {
     g_layer_manager->UpDown(g_task_b_window_layer_id, std::numeric_limits<int>::max());
 }
 
-void TaskB(int task_id, int data) {
-    printk("Task: task_id=%d, data=%d\n", task_id, data);
+void TaskB(uint64_t task_id, int64_t data) {
+    printk("Task: task_id=%lu, data=%lx\n", task_id, data);
     char str[128];
     int count = 0;
     while (true) {
@@ -133,6 +133,12 @@ void TaskB(int task_id, int data) {
         g_layer_manager->Draw(g_task_b_window_layer_id);
     }
 }
+
+void TaskIdle(uint64_t task_id, int64_t data) {
+    printk("TaskIdle: task_id=%lu, data=%lx\n", task_id, data);
+    while (true) __asm__("hlt");
+}
+
 /// 割り込みキュー
 std::deque<Message>* g_main_queue;
 
@@ -142,7 +148,7 @@ alignas(16) uint8_t g_kernel_main_stack[1024 * 1024];
 extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
                                    const MemoryMap& memory_map,
                                    const acpi::RSDP& acpi_table) {
-    // GUI
+    // フレームバッファ
     InitializeGraphics(frame_buffer_config);
     // メモリマネージャーやレイヤーマネージャーを生成する前のデバッグ情報を表示したいので、それらより前にコンソールを生成
     InitializeConsole();
@@ -187,27 +193,11 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
     __asm__("sti");
     bool textbox_cursor_visible = false;
 
-    // タスクB
-    // 8KiB
-    std::vector<uint64_t> task_b_stack(1024);
-    uint64_t task_b_stack_end = reinterpret_cast<uint64_t>(&task_b_stack[1024]);
-
-    memset(&g_task_b_ctx, 0, sizeof(g_task_b_ctx));
-    g_task_b_ctx.rip = reinterpret_cast<uint64_t>(TaskB);
-    g_task_b_ctx.rdi = 1;
-    g_task_b_ctx.rsi = 43;
-
-    g_task_b_ctx.cr3 = GetCR3();
-    g_task_b_ctx.rflags = 0x202;
-    g_task_b_ctx.cs = kKernelCS;
-    g_task_b_ctx.ss = kKernelSS;
-    g_task_b_ctx.rsp = (task_b_stack_end & ~0xflu) - 8;
-
-    // MXCSRのすべての例外をマスクする
-    *reinterpret_cast<uint32_t*>(&g_task_b_ctx.fxsave_area[24]) = 0x1f80;
-
     // マルチタスク
     InitializeTask();
+    g_task_manager->NewTask().InitContext(TaskB, 45);
+    g_task_manager->NewTask().InitContext(TaskIdle, 0xdeadbeef);
+    g_task_manager->NewTask().InitContext(TaskIdle, 0xcafebabe);
 
     char str[128];
     // 割り込みイベントループ
