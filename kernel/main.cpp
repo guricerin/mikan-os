@@ -134,11 +134,6 @@ void TaskB(uint64_t task_id, int64_t data) {
     }
 }
 
-void TaskIdle(uint64_t task_id, int64_t data) {
-    printk("TaskIdle: task_id=%lu, data=%lx\n", task_id, data);
-    while (true) __asm__("hlt");
-}
-
 alignas(16) uint8_t g_kernel_main_stack[1024 * 1024];
 
 // ブートローダからフレームバッファの情報とメモリマップを受け取る
@@ -190,12 +185,6 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
                                   .InitContext(TaskB, 45)
                                   .Wakeup()
                                   .ID();
-    g_task_manager->NewTask()
-        .InitContext(TaskIdle, 0xdeadbeef)
-        .Wakeup();
-    g_task_manager->NewTask()
-        .InitContext(TaskIdle, 0xcafebabe)
-        .Wakeup();
 
     // USBデバイス
     // xHCIは初期化するとすぐに割り込みが発生するので、タスク機能を初期化してからにする
