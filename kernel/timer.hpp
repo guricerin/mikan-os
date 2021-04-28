@@ -6,6 +6,7 @@
 
 #include "message.hpp"
 #include <cstdint>
+#include <limits>
 #include <queue>
 #include <vector>
 
@@ -39,7 +40,8 @@ class TimerManager {
 public:
     TimerManager(std::deque<Message>& msg_queue);
     void AddTimer(const Timer& timer);
-    void Tick();
+    /// タスク切り替え用タイマがタイムアウト : true
+    bool Tick();
     unsigned long CurrentTick() const { return tick_; }
 
 private:
@@ -54,5 +56,11 @@ extern TimerManager* g_timer_manager;
 extern unsigned long g_lapic_timer_freq;
 /// 1秒間にTimerManager::Tick()をコールする回数
 const int kTimerFreq = 100;
+
+/// タスク切り替え用タイマの周期
+/// 0.02secでタイムアウト
+const int kTaskTimerPeriod = static_cast<int>(kTimerFreq * 0.02);
+/// タスク切り替え用タイマの値（他のタイマとの識別用）
+const int kTaskTimerValue = std::numeric_limits<int>::min();
 
 void LAPICTimerOnInterrupt();

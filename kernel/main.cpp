@@ -24,6 +24,7 @@
 #include "paging.hpp"
 #include "pci.hpp"
 #include "segment.hpp"
+#include "task.hpp"
 #include "timer.hpp"
 #include "usb/xhci/xhci.hpp"
 #include "window.hpp"
@@ -120,17 +121,6 @@ void InitializeTaskBWindow() {
     g_layer_manager->UpDown(g_task_b_window_layer_id, std::numeric_limits<int>::max());
 }
 
-/// コンテクストの切替時に値の保存と復帰に必要なレジスタをすべて含む
-struct TaskContext {
-    uint64_t cr3, rip, rflags, reserved;             // offset 0x00
-    uint64_t cs, ss, fs, gs;                         // offset 0x20
-    uint64_t rax, rbx, rcx, rdx, rdi, rsi, rsp, rbp; // offset 0x40
-    uint64_t r8, r9, r19, r11, r12, r13, r14, r15;   // offset 0x80
-    std::array<uint8_t, 512> fxsave_area;            // offset 0xc0
-} __attribute__((packed));
-
-alignas(16) TaskContext g_task_b_ctx, g_task_a_ctx;
-
 void TaskB(int task_id, int data) {
     printk("Task: task_id=%d, data=%d\n", task_id, data);
     char str[128];
@@ -141,8 +131,6 @@ void TaskB(int task_id, int data) {
         FillRectangle(*g_task_b_window->Writer(), {24, 28}, {8 * 10, 16}, {0xc6, 0xc6, 0xc6});
         WriteString(*g_task_b_window->Writer(), {24, 28}, str, {0, 0, 0});
         g_layer_manager->Draw(g_task_b_window_layer_id);
-
-        SwitchContext(&g_task_a_ctx, &g_task_b_ctx);
     }
 }
 /// 割り込みキュー
@@ -207,7 +195,7 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
     memset(&g_task_b_ctx, 0, sizeof(g_task_b_ctx));
     g_task_b_ctx.rip = reinterpret_cast<uint64_t>(TaskB);
     g_task_b_ctx.rdi = 1;
-    g_task_b_ctx.rsi = 42;
+    g_task_b_ctx.rsi = 43;
 
     g_task_b_ctx.cr3 = GetCR3();
     g_task_b_ctx.rflags = 0x202;
@@ -215,8 +203,11 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
     g_task_b_ctx.ss = kKernelSS;
     g_task_b_ctx.rsp = (task_b_stack_end & ~0xflu) - 8;
 
-    // <XCSRのすべての例外をマスクする
+    // MXCSRのすべての例外をマスクする
     *reinterpret_cast<uint32_t*>(&g_task_b_ctx.fxsave_area[24]) = 0x1f80;
+
+    // マルチタスク
+    InitializeTask();
 
     char str[128];
     // 割り込みイベントループ
@@ -237,8 +228,7 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
         __asm__("cli");
         if (g_main_queue->size() == 0) {
             // set interrupt : 割り込みを有効化
-            __asm__("sti");
-            SwitchContext(&g_task_b_ctx, &g_task_a_ctx);
+            __asm__("sti\n\thlt");
             // 割り込みが発生すると、この次の行（ここではcontinue）から処理を再開
             continue;
         }

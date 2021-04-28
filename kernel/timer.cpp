@@ -2,6 +2,7 @@
 
 #include "acpi.hpp"
 #include "interrupt.hpp"
+#include "task.hpp"
 
 namespace {
     const uint32_t kCountMax = 0xffffffffu;
@@ -55,14 +56,28 @@ void StopLAPICTimer() {
 Timer::Timer(unsigned long timeout, int value) : timeout_{timeout}, value_{value} {
 }
 
-void TimerManager::Tick() {
+TimerManager::TimerManager(std::deque<Message>& msg_queue) : msg_queue_{msg_queue} {
+    // 番兵
+    timers_.push(Timer{std::numeric_limits<unsigned long>::max(), -1});
+}
+
+bool TimerManager::Tick() {
     tick_++;
+
+    bool task_timer_timeout = false;
     // タイムアウト処理
     while (true) {
         const auto& t = timers_.top();
         // 先頭がまだタイムアウトしていない場合にループから抜ける
         if (t.Timeout() > tick_) {
             break;
+        }
+
+        if (t.Value() == kTaskTimerValue) {
+            task_timer_timeout = true;
+            timers_.pop();
+            timers_.push(Timer{tick_ + kTaskTimerPeriod, kTaskTimerValue});
+            continue;
         }
 
         Message msg{Message::kTimerTimeout};
@@ -73,11 +88,8 @@ void TimerManager::Tick() {
 
         timers_.pop();
     }
-}
 
-TimerManager::TimerManager(std::deque<Message>& msg_queue) : msg_queue_{msg_queue} {
-    // 番兵
-    timers_.push(Timer{std::numeric_limits<unsigned long>::max(), -1});
+    return task_timer_timeout;
 }
 
 void TimerManager::AddTimer(const Timer& timer) {
@@ -88,5 +100,11 @@ TimerManager* g_timer_manager;
 unsigned long g_lapic_timer_freq;
 
 void LAPICTimerOnInterrupt() {
-    g_timer_manager->Tick();
+    const bool task_timer_timeout = g_timer_manager->Tick();
+    // タスク切り替えの前にコールしておかないと、タスク切り替え後にタイマ割り込みがこなくなる
+    NotifyEndOfInterrupt();
+
+    if (task_timer_timeout) {
+        SwitchTask();
+    }
 }
