@@ -24,9 +24,13 @@ struct TaskContext {
 
 using TaskFunc = void(uint64_t, int64_t);
 
+class TaskManager;
+
 /// タスク : 動作中のプログラム。処理単位。
 class Task {
 public:
+    /// 優先度。数字が大きいほど高い。
+    static const int kDefaultLevel = 1;
     static const size_t kDefaultStackBytes = 4096;
 
     Task(uint64_t id);
@@ -40,6 +44,8 @@ public:
     void SendMessage(const Message& msg);
     /// メッセージを取得
     std::optional<Message> ReceiveMessage();
+    int Level() const { return level_; }
+    bool Running() const { return running_; }
 
 private:
     uint64_t id_;
@@ -48,11 +54,26 @@ private:
     alignas(16) TaskContext context_;
     /// 割り込みメッセージキュー
     std::deque<Message> msgs_;
+    unsigned int level_{kDefaultLevel};
+    /// 実行可能状態（待機列に並んでいる） : true
+    bool running_{false};
+
+    Task& SetLevel(int level) {
+        level_ = level;
+        return *this;
+    }
+    Task& SetRunning(bool running) {
+        running_ = running;
+        return *this;
+    }
+
+    friend TaskManager;
 };
 
 /// 複数のタスクを管理
 class TaskManager {
 public:
+    static const int kMaxLevel = 3;
     TaskManager();
     /// 待機列には追加しない
     Task& NewTask();
@@ -62,8 +83,8 @@ public:
     void Sleep(Task* task);
     Error Sleep(uint64_t id);
     /// タスクを実行可能状態にする（待機列に復帰）
-    void Wakeup(Task* task);
-    Error Wakeup(uint64_t id);
+    void Wakeup(Task* task, int level = -1);
+    Error Wakeup(uint64_t id, int level = -1);
     /// 指定のタスクに割り込みメッセージを通知し、待機列に復帰させる
     Error SendMessage(uint64_t id, const Message& msg);
     /// 現在実行中のタスク
@@ -74,9 +95,16 @@ private:
     std::vector<std::unique_ptr<Task>> tasks_{};
     /// 最後に生成されたタスクのID
     uint64_t latest_id_{0};
-    /// タスクの待機列（ランキュー）
+    /// 優先度別のタスクの待機列（ランキュー）
     /// 先頭を現在実行中のタスクとする
-    std::deque<Task*> running_{};
+    /// あるタスクより優先度の低いタスクは、そのタスクがスリープするか同じ優先度まで下がらない限り実行されない
+    std::array<std::deque<Task*>, kMaxLevel + 1> running_{};
+    /// 現在実行中のタスクが属する優先度
+    int current_level_{kMaxLevel};
+    /// 次回のタスク切替え時に現在の実行レベルを変更 : true
+    bool level_changed_{false};
+
+    void ChangeLevelRunning(Task* task, int level);
 };
 
 extern TaskManager* g_task_manager;
