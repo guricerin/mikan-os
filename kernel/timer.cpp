@@ -17,8 +17,8 @@ namespace {
     volatile uint32_t& g_divide_config = *reinterpret_cast<uint32_t*>(0xfee003e0);
 } // namespace
 
-void InitializeLAPICTimer(std::deque<Message>& msg_queue) {
-    g_timer_manager = new TimerManager(msg_queue);
+void InitializeLAPICTimer() {
+    g_timer_manager = new TimerManager;
 
     g_divide_config = 0b1011; // divide 1:1
     // 割り込み不許可
@@ -56,7 +56,7 @@ void StopLAPICTimer() {
 Timer::Timer(unsigned long timeout, int value) : timeout_{timeout}, value_{value} {
 }
 
-TimerManager::TimerManager(std::deque<Message>& msg_queue) : msg_queue_{msg_queue} {
+TimerManager::TimerManager() {
     // 番兵
     timers_.push(Timer{std::numeric_limits<unsigned long>::max(), -1});
 }
@@ -84,7 +84,7 @@ bool TimerManager::Tick() {
         msg.arg.timer.timeout = t.Timeout();
         msg.arg.timer.value = t.Value();
         // タイマがタイムアウトしたことをメイン関数に通知
-        msg_queue_.push_back(msg);
+        g_task_manager->SendMessage(1, msg);
 
         timers_.pop();
     }

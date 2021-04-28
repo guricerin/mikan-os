@@ -47,8 +47,24 @@ Task& Task::Wakeup() {
     return *this;
 }
 
+void Task::SendMessage(const Message& msg) {
+    msgs_.push_back(msg);
+    Wakeup();
+}
+
+std::optional<Message> Task::ReceiveMessage() {
+    if (msgs_.empty()) {
+        return std::nullopt;
+    }
+    // メッセージキューからメッセージを取り出す
+    auto msg = msgs_.front();
+    msgs_.pop_front();
+    return msg;
+}
+
 TaskManager::TaskManager() {
-    // 番兵
+    // 最初に突っ込んでおくのはメインタスクとする
+    // idは常に1
     running_.push_back(&NewTask());
 }
 
@@ -113,6 +129,23 @@ Error TaskManager::Wakeup(uint64_t id) {
 
     Wakeup(it->get());
     return MAKE_ERROR(Error::kSuccess);
+}
+
+Error TaskManager::SendMessage(uint64_t id, const Message& msg) {
+    auto it = std::find_if(tasks_.begin(),
+                           tasks_.end(),
+                           [id](const auto& task) { return task->ID() == id; });
+
+    if (it == tasks_.end()) {
+        return MAKE_ERROR(Error::kNoSuchTask);
+    }
+
+    (*it)->SendMessage(msg);
+    return MAKE_ERROR(Error::kSuccess);
+}
+
+Task& TaskManager::CurrentTask() {
+    return *running_.front();
 }
 
 TaskManager* g_task_manager;

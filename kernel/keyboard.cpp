@@ -2,6 +2,7 @@
 
 #include <memory>
 
+#include "task.hpp"
 #include "usb/classdriver/keyboard.hpp"
 
 namespace {
@@ -51,9 +52,9 @@ namespace {
     const int kRGUIBitMask = 0b10000000u;
 } // namespace
 
-void InitializeKeyboard(std::deque<Message>& msg_queue) {
+void InitializeKeyboard() {
     // 割り込みイベント登録
-    usb::HIDKeyboardDriver::default_observer = [&msg_queue](uint8_t modifier, uint8_t keycode) {
+    usb::HIDKeyboardDriver::default_observer = [](uint8_t modifier, uint8_t keycode) {
         const bool shift = (modifier & (kLShiftBitMask | kRShiftBitMask)) != 0;
         char ascii = kKeyboardMap[keycode];
         if (shift) {
@@ -63,6 +64,7 @@ void InitializeKeyboard(std::deque<Message>& msg_queue) {
         msg.arg.keyboard.modifier = modifier;
         msg.arg.keyboard.keycode = keycode;
         msg.arg.keyboard.ascii = ascii;
-        msg_queue.push_back(msg);
+        // メインタスクに割り込みを通知
+        g_task_manager->SendMessage(1, msg);
     };
 }

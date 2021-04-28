@@ -6,9 +6,11 @@
 #include <cstddef>
 #include <cstdint>
 #include <deque>
+#include <optional>
 #include <vector>
 
 #include "error.hpp"
+#include "message.hpp"
 
 /// コンテキスト : タスクの実行バイナリ、コマンドライン引数、環境変数、スタックメモリ、各レジスタの値など
 /// コンテキストの切替時に値の保存と復帰に必要なレジスタをすべて含む
@@ -34,12 +36,18 @@ public:
     uint64_t ID() const;
     Task& Sleep();
     Task& Wakeup();
+    /// イベントメッセージが通知されたら起こす
+    void SendMessage(const Message& msg);
+    /// メッセージを取得
+    std::optional<Message> ReceiveMessage();
 
 private:
     uint64_t id_;
     /// スタック領域
     std::vector<uint64_t> stack_;
     alignas(16) TaskContext context_;
+    /// 割り込みメッセージキュー
+    std::deque<Message> msgs_;
 };
 
 /// 複数のタスクを管理
@@ -48,15 +56,18 @@ public:
     TaskManager();
     /// 待機列には追加しない
     Task& NewTask();
+    /// タスク切替え
     void SwitchTask(bool current_sleep = false);
-
     /// タスクをスリープ状態にする（待機列から除外）
     void Sleep(Task* task);
     Error Sleep(uint64_t id);
-
     /// タスクを実行可能状態にする（待機列に復帰）
     void Wakeup(Task* task);
     Error Wakeup(uint64_t id);
+    /// 指定のタスクに割り込みメッセージを通知し、待機列に復帰させる
+    Error SendMessage(uint64_t id, const Message& msg);
+    /// 現在実行中のタスク
+    Task& CurrentTask();
 
 private:
     /// タスク一覧

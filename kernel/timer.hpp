@@ -10,7 +10,7 @@
 #include <queue>
 #include <vector>
 
-void InitializeLAPICTimer(std::deque<Message>& msg_queue);
+void InitializeLAPICTimer();
 void StartLAPICTimer();
 uint32_t LAPICTimerElapsed();
 void StopLAPICTimer();
@@ -38,7 +38,7 @@ inline bool operator<(const Timer& lhs, const Timer& rhs) {
 /// タイマの割り込み回数を管理
 class TimerManager {
 public:
-    TimerManager(std::deque<Message>& msg_queue);
+    TimerManager();
     void AddTimer(const Timer& timer);
     /// タスク切り替え用タイマがタイムアウト : true
     bool Tick();
@@ -48,7 +48,6 @@ private:
     // タイマ割り込み回数
     volatile unsigned long tick_{0};
     std::priority_queue<Timer> timers_{};
-    std::deque<Message>& msg_queue_;
 };
 
 extern TimerManager* g_timer_manager;
