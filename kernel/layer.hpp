@@ -58,6 +58,9 @@ public:
     void Draw(const Rectangle<int>& area) const;
     /// 指定レイヤーに設定されているウィンドウの描画領域内を描画
     void Draw(unsigned int id) const;
+    /// 指定レイヤーに設定されているウィンドウの指定描画領域内を描画
+    /// area : ウィンドウの左上の基準とした座標
+    void Draw(unsigned int id, Rectangle<int> area) const;
 
     /// 例親ーの位置情報を指定の絶対座標へと更新。再描画。
     void Move(unsigned int id, Vector2D<int> new_position);
@@ -113,3 +116,15 @@ extern ActiveLayer* g_active_layer;
 void InitializeLayer();
 /// レイヤ操作要求を実際に処理
 void ProcessLayerMessage(const Message& msg);
+
+/// レイヤ操作要求メッセージを生成
+constexpr Message MakeLayerMessage(uint64_t task_id, unsigned int layer_id, LayerOperation op, const Rectangle<int>& area) {
+    Message msg{Message::kLayer, task_id};
+    msg.arg.layer.layer_id = layer_id;
+    msg.arg.layer.op = op;
+    msg.arg.layer.x = area.pos.x;
+    msg.arg.layer.y = area.pos.y;
+    msg.arg.layer.w = area.size.x;
+    msg.arg.layer.h = area.size.y;
+    return msg;
+}

@@ -14,8 +14,8 @@ public:
 
     Terminal();
     unsigned int LayerID() const { return layer_id_; }
-    /// カーソルの点滅を切り替える
-    void BlinkCursor();
+    /// カーソルの点滅を切り替え、カーソルの描画領域を返す
+    Rectangle<int> BlinkCursor();
 
 private:
     std::shared_ptr<TopLevelWindow> window_;

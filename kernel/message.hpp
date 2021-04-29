@@ -3,9 +3,14 @@
 #include <cstdint>
 
 enum class LayerOperation {
+    /// 指定の座標に移動
     Move,
+    /// 移動量を指定
     MoveRelative,
+    /// 全体描画
     Draw,
+    /// 描画領域を指定
+    DrawArea,
 };
 
 /// 割り込みメッセージ
@@ -41,6 +46,7 @@ struct Message {
             /// 操作対象のレイヤーID
             unsigned int layer_id;
             int x, y;
+            int w, h;
         } layer;
     } arg;
 };
