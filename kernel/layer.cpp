@@ -214,3 +214,21 @@ void InitializeLayer() {
     g_layer_manager->UpDown(bg_layer_id, 0);
     g_layer_manager->UpDown(g_console->LayerID(), 1);
 }
+
+void ProcessLayerMessage(const Message& msg) {
+    const auto& arg = msg.arg.layer;
+    switch (arg.op) {
+    case LayerOperation::Move:
+        g_layer_manager->Move(arg.layer_id, {arg.x, arg.y});
+        break;
+    case LayerOperation::MoveRelative:
+        g_layer_manager->MoveRelative(arg.layer_id, {arg.x, arg.y});
+        break;
+    case LayerOperation::Draw:
+        g_layer_manager->Draw(arg.layer_id);
+        break;
+    default:
+        Log(kError, "LayerOperation is not exhausted");
+        exit(1);
+    }
+}

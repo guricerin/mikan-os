@@ -125,12 +125,39 @@ void TaskB(uint64_t task_id, int64_t data) {
     printk("Task: task_id=%lu, data=%lx\n", task_id, data);
     char str[128];
     int count = 0;
+
+    __asm__("cli");
+    Task& task = g_task_manager->CurrentTask();
+    __asm__("sti");
+
     while (true) {
         count++;
         sprintf(str, "%010d", count);
         FillRectangle(*g_task_b_window->Writer(), {24, 28}, {8 * 10, 16}, {0xc6, 0xc6, 0xc6});
         WriteString(*g_task_b_window->Writer(), {24, 28}, str, {0, 0, 0});
-        g_layer_manager->Draw(g_task_b_window_layer_id);
+
+        // メインタスクに描画処理を要求
+        Message msg{Message::kLayer, task_id};
+        msg.arg.layer.layer_id = g_task_b_window_layer_id;
+        msg.arg.layer.op = LayerOperation::Draw;
+        __asm__("cli");
+        g_task_manager->SendMessage(1, msg);
+        __asm__("sti");
+
+        // 描画終了メッセージを受け取るまで待機
+        while (true) {
+            __asm__("cli");
+            auto msg = task.ReceiveMessage();
+            if (!msg) {
+                task.Sleep();
+                __asm__("sti");
+                continue;
+            }
+
+            if (msg->type == Message::kLayerFinish) {
+                break;
+            }
+        }
     }
 }
 
@@ -241,6 +268,15 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
             } else if (msg->arg.keyboard.ascii == 'w') {
                 printk("wakeup TaskB: %s\n", g_task_manager->Wakeup(taskb_id).Name());
             }
+            break;
+        case Message::kLayer:
+            // 描画中の割り込みは許可しておく
+            // 描画処理は低優先度な割にリソースを食うため、割り込みを禁止すると取りこぼしが発生するから
+            ProcessLayerMessage(*msg);
+            __asm__("cli");
+            // 送信元タスクに描画終了を通知
+            g_task_manager->SendMessage(msg->src_task, Message{Message::kLayerFinish});
+            __asm__("sti");
             break;
         default:
             Log(kError, "Unknown message type: %d\n", msg->type);

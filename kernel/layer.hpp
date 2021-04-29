@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "graphics.hpp"
+#include "message.hpp"
 #include "window.hpp"
 
 /// 1つの描画層
@@ -93,3 +94,5 @@ extern LayerManager* g_layer_manager;
 
 /// 背景とコンソールをレイヤー上に構築
 void InitializeLayer();
+/// レイヤ操作要求を実際に処理
+void ProcessLayerMessage(const Message& msg);
