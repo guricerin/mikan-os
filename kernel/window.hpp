@@ -74,6 +74,8 @@ class TopLevelWindow : public Window {
 public:
     static constexpr Vector2D<int> kTopLeftMargin{4, 24};
     static constexpr Vector2D<int> kBottomRightMargin{4, 4};
+    static const int kMarginX = kTopLeftMargin.x + kBottomRightMargin.x;
+    static const int kMarginY = kTopLeftMargin.y + kBottomRightMargin.y;
 
     /// ウィンドウの枠内（タイトルバーや枠を除いた描画領域）のみを描画する
     class InnerAreaWriter : public PixelWriter {
@@ -108,5 +110,6 @@ private:
 /// 窓を描画
 void DrawWindow(PixelWriter& writer, const char* title);
 void DrawTextbox(PixelWriter& writer, Vector2D<int> pos, Vector2D<int> size);
+void DrawTerminal(PixelWriter& writer, Vector2D<int> pos, Vector2D<int> size);
 /// 窓にタイトルバーを描画
 void DrawWindowTitle(PixelWriter& writer, const char* title, bool active);

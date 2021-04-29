@@ -25,6 +25,7 @@
 #include "pci.hpp"
 #include "segment.hpp"
 #include "task.hpp"
+#include "terminal.hpp"
 #include "timer.hpp"
 #include "usb/xhci/xhci.hpp"
 #include "window.hpp"
@@ -65,7 +66,7 @@ void InitializeTextWindow() {
     g_text_window_layer_id = g_layer_manager->NewLayer()
                                  .SetWindow(g_text_window)
                                  .SetDraggable(true)
-                                 .Move({350, 200})
+                                 .Move({500, 100})
                                  .ID();
 
     g_layer_manager->UpDown(g_text_window_layer_id, std::numeric_limits<int>::max());
@@ -209,6 +210,10 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
                                   .InitContext(TaskB, 45)
                                   .Wakeup()
                                   .ID();
+    const uint64_t task_terminal_id = g_task_manager->NewTask()
+                                          .InitContext(TaskTerminal, 0)
+                                          .Wakeup()
+                                          .ID();
 
     // USBデバイス
     // xHCIは初期化するとすぐに割り込みが発生するので、タスク機能を初期化してからにする
@@ -258,6 +263,10 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
                 textbox_cursor_visible = !textbox_cursor_visible;
                 DrawTextCursor(textbox_cursor_visible);
                 g_layer_manager->Draw(g_text_window_layer_id);
+
+                __asm__("cli");
+                g_task_manager->SendMessage(task_terminal_id, *msg);
+                __asm__("sti");
             }
             break;
         case Message::kKeyPush:

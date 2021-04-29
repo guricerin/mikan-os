@@ -119,6 +119,24 @@ namespace {
         ".$$$$$$$$$$$$$$@",
         "@@@@@@@@@@@@@@@@",
     };
+
+    void DrawTextbox(PixelWriter& writer, Vector2D<int> pos, Vector2D<int> size,
+                     const PixelColor& background,
+                     const PixelColor& border_light,
+                     const PixelColor& border_dark) {
+        auto fill_rect = [&writer](Vector2D<int> pos, Vector2D<int> size, const PixelColor& color) {
+            FillRectangle(writer, pos, size, color);
+        };
+
+        // fill main box
+        fill_rect(pos + Vector2D<int>{1, 1}, size - Vector2D<int>{2, 2}, background);
+
+        // draw border line
+        fill_rect(pos, {size.x, 1}, border_dark);
+        fill_rect(pos, {1, size.y}, border_dark);
+        fill_rect(pos + Vector2D<int>{0, size.y}, {size.x, 1}, border_light);
+        fill_rect(pos + Vector2D<int>{size.x, 0}, {1, size.y}, border_light);
+    }
 } // namespace
 
 void DrawWindow(PixelWriter& writer, const char* title) {
@@ -138,24 +156,15 @@ void DrawWindow(PixelWriter& writer, const char* title) {
     fill_rect({1, win_h - 2}, {win_w - 2, 1}, 0x848484);
     fill_rect({0, win_h - 1}, {win_w, 1}, 0x000000);
 
-    WriteString(writer, {24, 4}, title, ToColor(0xffffff));
-
     DrawWindowTitle(writer, title, false);
 }
 
 void DrawTextbox(PixelWriter& writer, Vector2D<int> pos, Vector2D<int> size) {
-    auto fill_rect = [&writer](Vector2D<int> pos, Vector2D<int> size, uint32_t color) {
-        FillRectangle(writer, pos, size, ToColor(color));
-    };
+    DrawTextbox(writer, pos, size, ToColor(0xffffff), ToColor(0xc6c6c6), ToColor(0x848484));
+}
 
-    // fill main box
-    fill_rect(pos + Vector2D<int>{1, 1}, size - Vector2D<int>{2, 2}, 0xffffff);
-
-    // draw border line
-    fill_rect(pos, {size.x, 1}, 0x848484);
-    fill_rect(pos, {1, size.y}, 0x848484);
-    fill_rect(pos + Vector2D<int>{0, size.y}, {size.x, 1}, 0xc6c6c6);
-    fill_rect(pos + Vector2D<int>{size.x, 0}, {1, size.y}, 0xc6c6c6);
+void DrawTerminal(PixelWriter& writer, Vector2D<int> pos, Vector2D<int> size) {
+    DrawTextbox(writer, pos, size, ToColor(0x000000), ToColor(0xc6c6c6), ToColor(0x848484));
 }
 
 void DrawWindowTitle(PixelWriter& writer, const char* title, bool active) {
