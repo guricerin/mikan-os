@@ -1,6 +1,7 @@
 #pragma once
 
 #include <optional>
+#include <string>
 #include <vector>
 
 #include "frame_buffer.hpp"
@@ -27,7 +28,7 @@ public:
 
     /// 指定されたピクセル数の平面描画領域を作成
     Window(int width, int height, PixelFormat shadow_format);
-    ~Window() = default;
+    virtual ~Window() = default;
     Window(const Window& rhs) = delete;
     Window& operator=(const Window& rhs) = delete;
 
@@ -52,6 +53,10 @@ public:
     /// このウィンドウの平面領域内で、矩形領域を移動する
     void Move(Vector2D<int> dst_pos, const Rectangle<int>& src);
 
+    /// タイトルバーをもたない描画領域ならなにもしない
+    virtual void Activate() {}
+    virtual void Deactivate() {}
+
 private:
     int width_, height_;
     std::vector<std::vector<PixelColor>> data_{};
@@ -63,7 +68,45 @@ private:
     FrameBuffer shadow_buffer_{};
 };
 
+/// タイトルバー付きのウィンドウ
+/// 窓
+class TopLevelWindow : public Window {
+public:
+    static constexpr Vector2D<int> kTopLeftMargin{4, 24};
+    static constexpr Vector2D<int> kBottomRightMargin{4, 4};
+
+    /// ウィンドウの枠内（タイトルバーや枠を除いた描画領域）のみを描画する
+    class InnerAreaWriter : public PixelWriter {
+    public:
+        InnerAreaWriter(TopLevelWindow& window) : window_{window} {}
+        virtual void Write(Vector2D<int> pos, const PixelColor& color) override {
+            window_.Write(pos + kTopLeftMargin, color);
+        }
+        virtual int Width() const override {
+            return window_.Width() - kTopLeftMargin.x - kBottomRightMargin.x;
+        }
+        virtual int Height() const override {
+            return window_.Height() - kTopLeftMargin.y - kBottomRightMargin.y;
+        }
+
+    private:
+        TopLevelWindow& window_;
+    };
+
+    TopLevelWindow(int width, int height, PixelFormat shadow_format, const std::string& title);
+    virtual void Activate() override;
+    virtual void Deactivate() override;
+
+    InnerAreaWriter* InnerWriter() { return &inner_writer_; }
+    Vector2D<int> InnerSize() const;
+
+private:
+    std::string title_;
+    InnerAreaWriter inner_writer_{*this};
+};
+
 /// 窓を描画
 void DrawWindow(PixelWriter& writer, const char* title);
-
 void DrawTextbox(PixelWriter& writer, Vector2D<int> pos, Vector2D<int> size);
+/// 窓にタイトルバーを描画
+void DrawWindowTitle(PixelWriter& writer, const char* title, bool active);

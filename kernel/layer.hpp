@@ -61,7 +61,6 @@ public:
 
     /// 例親ーの位置情報を指定の絶対座標へと更新。再描画。
     void Move(unsigned int id, Vector2D<int> new_position);
-
     /// 例親ーの位置情報を指定の相対座標へと更新。再描画。
     void MoveRelative(unsigned int id, Vector2D<int> pos_diff);
 
@@ -69,28 +68,46 @@ public:
     /// new_heightに負の位置を指定するとレイヤーは非表示となり、0以上を指定するとその位置となる
     /// 現在のレイヤー数以上の数値を指定した場合は最前面のレイヤーとなる
     void UpDown(unsigned int id, int new_height);
-
     /// レイヤーを非表示にする
     void Hide(unsigned int id);
 
     /// 指定座標にウィンドウをもつ最前面のレイヤーを取得
     Layer* FindLayerByPosition(Vector2D<int> pos, unsigned int exclude_id) const;
+    /// 指定IDのレイヤーを返す
+    Layer* FindLayer(unsigned int id);
+    // 指定レイヤの現在の階層
+    int GetHeight(unsigned int id);
 
 private:
     FrameBuffer* screen_{nullptr};
     /// ダブルバッファリング用
     /// mutable修飾子はconstメソッド内からでも変更可能
     mutable FrameBuffer back_buffer_{};
+    /// レイヤ一覧
     std::vector<std::unique_ptr<Layer>> layers_{};
     /// 配列の先頭を再背面、末尾を最前面とする。非表示レイヤは含まない
     std::vector<Layer*> layer_stack_{};
     unsigned int latest_id_{0};
+};
 
-    /// 指定IDのレイヤーを返す
-    Layer* FindLayer(unsigned int id);
+class ActiveLayer {
+public:
+    ActiveLayer(LayerManager& manager);
+    void SetMouseLayer(unsigned int mouse_layer);
+    /// 指定したレイヤを最前面にする
+    void Activate(unsigned int layer_id);
+    unsigned int GetActive() const { return active_layer_; }
+
+private:
+    LayerManager& manager_;
+    /// 最前面レイヤ（マウスレイヤの1つ下）
+    unsigned int active_layer_{0};
+    /// マウスレイヤを本当の最前面とする
+    unsigned int mouse_layer_{0};
 };
 
 extern LayerManager* g_layer_manager;
+extern ActiveLayer* g_active_layer;
 
 /// 背景とコンソールをレイヤー上に構築
 void InitializeLayer();

@@ -64,8 +64,11 @@ void Mouse::OnInterrupt(uint8_t buttons, int8_t displacement_x, int8_t displacem
     const bool left_pressed = (buttons & 0x01);
     if (!previous_left_pressed && left_pressed) { // 左クリック
         auto layer = g_layer_manager->FindLayerByPosition(position_, layer_id_);
-        if (layer && layer->IsDraggable()) {
+        if (layer && layer->IsDraggable()) { // ウィンドウクリック
             drag_layer_id_ = layer->ID();
+            g_active_layer->Activate(layer->ID());
+        } else {
+            g_active_layer->Activate(0); // すべてのウィンドウを非アクティブ化
         }
     } else if (previous_left_pressed && left_pressed) { // ドラッグ中
         if (drag_layer_id_ > 0) {
@@ -100,4 +103,6 @@ void InitializeMouse() {
     usb::HIDMouseDriver::default_observer = [mouse](uint8_t buttons, int8_t displacement_x, int8_t displacement_y) {
         mouse->OnInterrupt(buttons, displacement_x, displacement_y);
     };
+
+    g_active_layer->SetMouseLayer(mouse_layer_id);
 }
