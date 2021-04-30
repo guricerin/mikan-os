@@ -279,9 +279,19 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
                     printk("wakeup TaskB: %s\n", g_task_manager->Wakeup(taskb_id).Name());
                 }
             } else {
-                printk("key push no handled: keycode %02x, ascii %02x\n",
-                       msg->arg.keyboard.keycode,
-                       msg->arg.keyboard.ascii);
+                // アクティブなレイヤIDからタスクを検索し、そのタスクにメッセージを通知
+                __asm__("cli");
+                auto task_it = g_layer_task_map->find(act);
+                __asm__("sti");
+                if (task_it != g_layer_task_map->end()) {
+                    __asm__("cli");
+                    g_task_manager->SendMessage(task_it->second, *msg);
+                    __asm__("sti");
+                } else {
+                    printk("key push no handled: keycode %02x, ascii %02x\n",
+                           msg->arg.keyboard.keycode,
+                           msg->arg.keyboard.ascii);
+                }
             }
             break;
         case Message::kLayer:

@@ -99,6 +99,7 @@ public:
     void SetMouseLayer(unsigned int mouse_layer);
     /// 指定したレイヤを最前面にする
     void Activate(unsigned int layer_id);
+    /// アクティブ状態のレイヤIDを返す
     unsigned int GetActive() const { return active_layer_; }
 
 private:
@@ -111,6 +112,8 @@ private:
 
 extern LayerManager* g_layer_manager;
 extern ActiveLayer* g_active_layer;
+/// レイヤIDとタスクを関連付ける
+extern std::map<unsigned int, uint64_t>* g_layer_task_map;
 
 /// 背景とコンソールをレイヤー上に構築
 void InitializeLayer();
