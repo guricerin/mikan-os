@@ -10,6 +10,7 @@
 #include "acpi.hpp"
 #include "asmfunc.h"
 #include "console.hpp"
+#include "fat.hpp"
 #include "font.hpp"
 #include "frame_buffer_config.hpp"
 #include "graphics.hpp"
@@ -127,6 +128,9 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
     // 割り込み
     InitializeInterrupt();
 
+    // FATファイルシステム
+    fat::Initialize(volume_image);
+
     // デバイス
     InitializePCI();
 
@@ -162,23 +166,6 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
     usb::xhci::Initialize();
     InitializeKeyboard();
     InitializeMouse();
-
-    // ボリュームイメージの先頭256byteを16進数で表示
-    uint8_t* p = reinterpret_cast<uint8_t*>(volume_image);
-    printk("Volume Image:\n");
-    for (int i = 0; i < 16; i++) {
-        printk(" %04x:", i * 16);
-        for (int j = 0; j < 8; j++) {
-            printk(" %02x", *p);
-            p++;
-        }
-        printk(" ");
-        for (int j = 0; j < 8; j++) {
-            printk(" %02x", *p);
-            p++;
-        }
-        printk("\n");
-    }
 
     char str[128];
     // 割り込みイベントループ
