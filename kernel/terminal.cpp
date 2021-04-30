@@ -4,7 +4,7 @@
 
 #include "font.hpp"
 #include "layer.hpp"
-#include "logger.hpp"
+#include "pci.hpp"
 
 Terminal::Terminal() {
     window_ = std::make_shared<TopLevelWindow>(
@@ -107,6 +107,16 @@ void Terminal::ExecuteLine() {
     } else if (strcmp(command, "clear") == 0) {
         FillRectangle(*window_->InnerWriter(), {4, 4}, {8 * kColumns, 16 * kRows}, {0, 0, 0});
         cursor_.y = 0;
+    } else if (strcmp(command, "lspci") == 0) {
+        char s[64];
+        for (int i = 0; i < pci::g_num_device; i++) {
+            const auto& device = pci::g_devices[i];
+            auto vendor_id = pci::ReadVendorId(device.bus, device.device, device.function);
+            sprintf(s, "%02x:%02x.%d vend=%04x head=%02x class=%02x.%02x.%02x\n",
+                    device.bus, device.device, device.function, vendor_id, device.header_type,
+                    device.class_code.base, device.class_code.sub, device.class_code.interface);
+            Print(s);
+        }
     } else if (command[0] != 0) {
         Print("no such command: ");
         Print(command);
