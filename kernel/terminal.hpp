@@ -27,9 +27,14 @@ private:
     /// カーソルの現在位置
     Vector2D<int> cursor_{0, 0};
     bool cursol_visible_{false};
-    int linebuf_index_{0};
     /// キー入力を1行分ためておくバッファ
     std::array<char, kLineMax> linebuf_{};
+    int linebuf_index_{0};
+    /// コマンド履歴
+    /// 先頭は最新の履歴
+    std::deque<std::array<char, kLineMax>> cmd_history_{};
+    /// -1は履歴を辿っていない状態
+    int cmd_history_index_{-1};
 
     void DrawCursor(bool visible);
     Vector2D<int> CalcCursorPos() const;
@@ -37,6 +42,7 @@ private:
     void Scroll1();
     void ExecuteLine();
     void Print(const char* s);
+    Rectangle<int> HistoryUpDown(int direction);
 };
 
 void TaskTerminal(uint64_t task_id, int64_t data);

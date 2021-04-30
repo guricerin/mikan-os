@@ -20,6 +20,7 @@ Terminal::Terminal() {
                     .ID();
 
     Print(">"); // プロンプト
+    cmd_history_.resize(8);
 }
 
 Rectangle<int> Terminal::BlinkCursor() {
@@ -39,9 +40,15 @@ Rectangle<int> Terminal::InputKey(uint8_t modifier, uint8_t keycode, char ascii)
 
     Rectangle<int> draw_area{CalcCursorPos(), {8 * 2, 16}};
 
-    if (ascii == '\n') {
+    if (ascii == '\n') {              // enter key
         linebuf_[linebuf_index_] = 0; // null文字
+        // コマンド履歴を更新
+        if (linebuf_index_ > 0) {
+            cmd_history_.pop_back();
+            cmd_history_.push_front(linebuf_);
+        }
         linebuf_index_ = 0;
+        cmd_history_index_ = -1;
         cursor_.x = 0;
         if (cursor_.y < kRows - 1) {
             cursor_.y++;
@@ -53,7 +60,7 @@ Rectangle<int> Terminal::InputKey(uint8_t modifier, uint8_t keycode, char ascii)
         Print(">"); // プロンプト
         draw_area.pos = TopLevelWindow::kTopLeftMargin;
         draw_area.size = window_->InnerSize();
-    } else if (ascii == '\b') {
+    } else if (ascii == '\b') { // back key
         if (cursor_.x > 0) {
             // 1文字消してカーソルを左に戻す
             cursor_.x--;
@@ -71,6 +78,10 @@ Rectangle<int> Terminal::InputKey(uint8_t modifier, uint8_t keycode, char ascii)
             WriteAscii(*window_->Writer(), CalcCursorPos(), ascii, {255, 255, 255});
             cursor_.x++;
         }
+    } else if (keycode == 0x51) { // down arrow
+        draw_area = HistoryUpDown(-1);
+    } else if (keycode == 0x52) { // up arrow
+        draw_area = HistoryUpDown(1);
     }
 
     DrawCursor(true);
@@ -152,6 +163,32 @@ void Terminal::Print(const char* s) {
     }
 
     DrawCursor(true);
+}
+
+Rectangle<int> Terminal::HistoryUpDown(int direction) {
+    if (direction == -1 && cmd_history_index_ >= 0) { // 最新に近づく
+        cmd_history_index_--;
+    } else if (direction == 1 && cmd_history_index_ + 1 < cmd_history_.size()) { // 過去に遡る
+        cmd_history_index_++;
+    }
+
+    cursor_.x = 1;
+    const auto first_pos = CalcCursorPos();
+
+    Rectangle<int> draw_area{first_pos, {8 * (kColumns - 1), 16}};
+    FillRectangle(*window_->Writer(), draw_area.pos, draw_area.size, {0, 0, 0});
+
+    const char* history = "";
+    if (cmd_history_index_ >= 0) {
+        history = &cmd_history_[cmd_history_index_][0];
+    }
+
+    strcpy(&linebuf_[0], history);
+    linebuf_index_ = strlen(history);
+
+    WriteString(*window_->Writer(), first_pos, history, {255, 255, 255});
+    cursor_.x = linebuf_index_ + 1;
+    return draw_area;
 }
 
 void TaskTerminal(uint64_t task_id, int64_t data) {
