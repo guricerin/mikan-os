@@ -35,6 +35,8 @@ private:
     Vector2D<int> CalcCursorPos() const;
     /// 1行だけスクロール
     void Scroll1();
+    void ExecuteLine();
+    void Print(const char* s);
 };
 
 void TaskTerminal(uint64_t task_id, int64_t data);
