@@ -105,60 +105,6 @@ void InputTextWindow(char input) {
     g_layer_manager->Draw(g_text_window_layer_id);
 }
 
-std::shared_ptr<TopLevelWindow> g_task_b_window;
-unsigned int g_task_b_window_layer_id;
-void InitializeTaskBWindow() {
-    g_task_b_window = std::make_shared<TopLevelWindow>(160, 52, g_screen_config.pixel_format, "TaskB Window");
-
-    g_task_b_window_layer_id = g_layer_manager->NewLayer()
-                                   .SetWindow(g_task_b_window)
-                                   .SetDraggable(true)
-                                   .Move({100, 100})
-                                   .ID();
-
-    g_layer_manager->UpDown(g_task_b_window_layer_id, std::numeric_limits<int>::max());
-}
-
-void TaskB(uint64_t task_id, int64_t data) {
-    printk("Task: task_id=%lu, data=%lx\n", task_id, data);
-    char str[128];
-    int count = 0;
-
-    __asm__("cli");
-    Task& task = g_task_manager->CurrentTask();
-    __asm__("sti");
-
-    while (true) {
-        count++;
-        sprintf(str, "%010d", count);
-        FillRectangle(*g_task_b_window->InnerWriter(), {20, 4}, {8 * 10, 16}, {0xc6, 0xc6, 0xc6});
-        WriteString(*g_task_b_window->InnerWriter(), {20, 4}, str, {0, 0, 0});
-
-        // メインタスクに描画処理を要求
-        Message msg{Message::kLayer, task_id};
-        msg.arg.layer.layer_id = g_task_b_window_layer_id;
-        msg.arg.layer.op = LayerOperation::Draw;
-        __asm__("cli");
-        g_task_manager->SendMessage(1, msg);
-        __asm__("sti");
-
-        // 描画終了メッセージを受け取るまで待機
-        while (true) {
-            __asm__("cli");
-            auto msg = task.ReceiveMessage();
-            if (!msg) {
-                task.Sleep();
-                __asm__("sti");
-                continue;
-            }
-
-            if (msg->type == Message::kLayerFinish) {
-                break;
-            }
-        }
-    }
-}
-
 alignas(16) uint8_t g_kernel_main_stack[1024 * 1024];
 
 // ブートローダからフレームバッファの情報とメモリマップを受け取る
@@ -187,7 +133,6 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
     InitializeLayer();
     InitializeMainWindow();
     InitializeTextWindow();
-    InitializeTaskBWindow();
     // 初回の描画は画面全体を対象にする
     g_layer_manager->Draw({{0, 0}, ScreenSize()});
 
@@ -206,10 +151,6 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
     InitializeTask();
     // このタスク（KernelMainStack()）
     Task& main_task = g_task_manager->CurrentTask();
-    const uint64_t taskb_id = g_task_manager->NewTask()
-                                  .InitContext(TaskB, 45)
-                                  .Wakeup()
-                                  .ID();
     const uint64_t task_terminal_id = g_task_manager->NewTask()
                                           .InitContext(TaskTerminal, 0)
                                           .Wakeup()
@@ -220,8 +161,6 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
     usb::xhci::Initialize();
     InitializeKeyboard();
     InitializeMouse();
-    // https://github.com/uchan-nos/os-from-zero/issues/42
-    g_active_layer->Activate(g_task_b_window_layer_id);
 
     char str[128];
     // 割り込みイベントループ
@@ -272,12 +211,6 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
         case Message::kKeyPush:
             if (auto act = g_active_layer->GetActive(); act == g_text_window_layer_id) {
                 InputTextWindow(msg->arg.keyboard.ascii);
-            } else if (act == g_task_b_window_layer_id) {
-                if (msg->arg.keyboard.ascii == 's') {
-                    printk("sleep TaskB: %s\n", g_task_manager->Sleep(taskb_id).Name());
-                } else if (msg->arg.keyboard.ascii == 'w') {
-                    printk("wakeup TaskB: %s\n", g_task_manager->Wakeup(taskb_id).Name());
-                }
             } else {
                 // アクティブなレイヤIDからタスクを検索し、そのタスクにメッセージを通知
                 __asm__("cli");
