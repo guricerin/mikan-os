@@ -2,7 +2,6 @@
 
 #include <cstring>
 
-#include "fat.hpp"
 #include "font.hpp"
 #include "layer.hpp"
 #include "pci.hpp"
@@ -180,10 +179,38 @@ void Terminal::ExecuteLine() {
             DrawCursor(true);
         }
     } else if (command[0] != 0) {
-        Print("no such command: ");
-        Print(command);
-        Print("\n");
+        auto file_entry = fat::FindFile(command);
+        if (!file_entry) {
+            Print("no such command: ");
+            Print(command);
+            Print("\n");
+        } else {
+            ExecuteFile(*file_entry);
+        }
     }
+}
+
+void Terminal::ExecuteFile(const fat::DirectoryEntry& file_entry) {
+    auto cluster = file_entry.FirstCluster();
+    auto remain_bytes = file_entry.file_size;
+
+    std::vector<uint8_t> file_buf(remain_bytes);
+    auto p = &file_buf[0];
+
+    while (cluster != 0 && cluster != fat::kEndOfClusterchain) {
+        const auto copy_bytes = fat::g_bytes_per_cluster < remain_bytes ? fat::g_bytes_per_cluster : remain_bytes;
+        memcpy(p, fat::GetSectorByCluster<uint8_t>(cluster), copy_bytes);
+
+        remain_bytes -= copy_bytes;
+        p += copy_bytes;
+        // 複数クラスタにまたがる場合にも対応
+        cluster = fat::NextCluster(cluster);
+    }
+
+    using Func = void();
+    // ファイルの先頭に実行可能な機械語が配置されている想定
+    auto f = reinterpret_cast<Func*>(&file_buf[0]);
+    f();
 }
 
 void Terminal::Print(const char* s) {
@@ -264,6 +291,7 @@ void TaskTerminal(uint64_t task_id, int64_t data) {
             __asm__("sti");
             continue;
         }
+        __asm__("sti");
 
         switch (msg->type) {
         case Message::kTimerTimeout: {

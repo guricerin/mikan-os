@@ -5,6 +5,7 @@
 #include <deque>
 #include <map>
 
+#include "fat.hpp"
 #include "layer.hpp"
 #include "task.hpp"
 #include "window.hpp"
@@ -42,6 +43,8 @@ private:
     void Scroll1();
     /// コマンド実行
     void ExecuteLine();
+    /// 実行可能ファイル（カーネル本体に組み込まれていないアプリ）を読み込んで実行
+    void ExecuteFile(const fat::DirectoryEntry& file_entry);
     void Print(const char* s);
     void Print(char c);
     /// コマンド履歴を辿る
