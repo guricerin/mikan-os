@@ -1,10 +1,3 @@
-DEVENV_PATH = $(HOME)/osbook/devenv/x86_64-elf
-INCLUDE = -I$(DEVENV_PATH)/include/c++/v1 -I$(DEVENV_PATH)/include -I$(DEVENV_PATH)/include/freetype2 -I.
-CPPFLAGS = $(INCLUDE) -nostdlibinc -D__ELF__ -D_LDBL_EQ_DBL -D_GNU_SOURCE -D_POSIX_TIMERS
-CXXFLAGS = -Wall -g -O2 --target=x86_64-elf -ffreestanding -mno-red-zone -fno-exceptions -fno-rtti -std=c++17
-CFLAGS = -Wall -g -O2 --target=x86_64-elf -ffreestanding -mno-red-zone 
-LDFLAGS = -L$(DEVENV_PATH)/lib --entry KernelMain -z norelro --image-base 0x100000 --static
-
 TARGET = kernel.elf
 OBJS = main.o graphics.o mouse.o font.o hankaku.o newlib_support.o console.o \
        pci.o asmfunc.o libcxx_support.o logger.o interrupt.o segment.o paging.o memory_manager.o \
@@ -14,6 +7,12 @@ OBJS = main.o graphics.o mouse.o font.o hankaku.o newlib_support.o console.o \
        usb/classdriver/base.o usb/classdriver/hid.o usb/classdriver/keyboard.o \
        usb/classdriver/mouse.o
 DEPENDS = $(join $(dir $(OBJS)),$(addprefix .,$(notdir $(OBJS:.o=.d))))
+
+CPPFLAGS += -I.
+CFLAGS   += -O2 -Wall -g --target=x86_64-elf -ffreestanding -mno-red-zone
+CXXFLAGS += -O2 -Wall -g --target=x86_64-elf -ffreestanding -mno-red-zone \
+            -fno-exceptions -fno-rtti -std=c++17
+LDFLAGS  += --entry KernelMain -z norelro --image-base 0x100000 --static
 
 .PHONY: default
 default: $(TARGET)

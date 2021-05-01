@@ -17,14 +17,15 @@ build_kernel() {
 
 build_apps() {
     for MK in $(ls ${SCRIPT_ROOT}/apps/*/Makefile); do
-        local -r APP_DIR=$(dirname $MK)
-        local -r APP=$(basename $APP_DIR)
+        local APP_DIR=$(dirname $MK)
+        local APP=$(basename $APP_DIR)
         make ${MAKE_OPTS:-} -C $APP_DIR $APP
     done
 }
 
 main() {
     build_loader
+    source $OSBOOK_DEVENV_PATH/buildenv.sh
     build_kernel
     build_apps
 
