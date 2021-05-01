@@ -1,4 +1,5 @@
 /// FATファイルシステム
+/// FAT : ファイルアロケーションテーブル
 
 #pragma once
 
@@ -9,6 +10,7 @@ namespace fat {
     /// PBR (Partition Boot Record) : パーティションの先頭1ブロック
     /// BPB (BIOS Parameter Block) : PBRに含まれる特に重要な領域
     /// セクタ : FATにおけるブロックのこと
+    /// クラスタ : いくつかのブロックをまとめたもの
     /// P.400
     struct BPB {
         uint8_t jump_boot[3];           // プログラムへのジャンプ命令
@@ -75,15 +77,17 @@ namespace fat {
 
     /// ボリュームイメージ : ブロックデバイスの中身を記録したデータ
     extern BPB* g_boot_volume_image;
+    /// バイト数 / クラスタ
+    extern unsigned long g_bytes_per_cluster;
 
     void Initialize(void* volume_iamge);
 
     /// 指定クラスタの先頭セクタが置いてあるメモリアドレスを返す
-    /// cluster : クラスタ番号（2番号）
+    /// cluster : クラスタ番号（2始まり）
     uintptr_t GetClusterAddr(unsigned long cluster);
 
     /// 指定クラスタの先頭セクタが置いてあるメモリ領域を返す
-    /// cluster : クラスタ番号（2番号）
+    /// cluster : クラスタ番号（2始まり）
     template <class T>
     T* GetSectorByCluster(unsigned long cluster) {
         return reinterpret_cast<T*>(GetClusterAddr(cluster));
@@ -95,4 +99,17 @@ namespace fat {
     /// base : 拡張子を除いたファイル名（9byte以上の配列）
     /// ext : 拡張子（4byte以上の配列）
     void ReadName(const DirectoryEntry& entry, char* base, char* ext);
+
+    static const unsigned long kEndOfClusterchain = 0x0ffffffflu;
+
+    /// 指定クラスタの次のクラスタ番号を返す
+    unsigned long NextCluster(unsigned long cluster);
+
+    /// 指定ディレクトリからファイルを探す
+    /// name : 8+3形式のファイル名（大文字小文字は区別しない）
+    /// directory_cluster : ディレクトリの開始クラスタ（省略するとルートから検索）
+    DirectoryEntry* FindFile(const char* name, unsigned long directory_cluster = 0);
+
+    /// 指定のファイル名と一致 : true
+    bool NameIsEqual(const DirectoryEntry& entry, const char* name);
 } // namespace fat

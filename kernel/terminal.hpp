@@ -40,8 +40,11 @@ private:
     Vector2D<int> CalcCursorPos() const;
     /// 1行だけスクロール
     void Scroll1();
+    /// コマンド実行
     void ExecuteLine();
     void Print(const char* s);
+    void Print(char c);
+    /// コマンド履歴を辿る
     Rectangle<int> HistoryUpDown(int direction);
 };
 
