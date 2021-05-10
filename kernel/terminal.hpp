@@ -44,7 +44,7 @@ private:
     /// コマンド実行
     void ExecuteLine();
     /// 実行可能ファイル（カーネル本体に組み込まれていないアプリ）を読み込んで実行
-    void ExecuteFile(const fat::DirectoryEntry& file_entry, char* command, char* first_arg);
+    Error ExecuteFile(const fat::DirectoryEntry& file_entry, char* command, char* first_arg);
     void Print(const char* s);
     void Print(char c);
     /// コマンド履歴を辿る

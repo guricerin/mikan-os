@@ -24,6 +24,7 @@ namespace {
 } // namespace
 
 /// 物理メモリフレーム（ページフレーム）1つの大きさ（byte）
+/// x86-64の64bitモードでは、4KiB, 2MiB, 1GiBのいずれかを選択
 static const auto kBytesPerFrame{4_KiB};
 
 /// ページフレーム番号
@@ -79,4 +80,5 @@ private:
     void SetBit(FrameID frame, bool allocated);
 };
 
+extern BitmapMemoryManager* g_memory_manager;
 void InitializeMemoryManager(const MemoryMap& memory_map);

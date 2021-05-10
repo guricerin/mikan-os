@@ -17,6 +17,18 @@ namespace {
     /// ページディレクトリ（これの要素がページテーブル）
     alignas(kPageSize4K)
         std::array<std::array<uint64_t, 512>, kPageDirectoryCount> g_page_directory;
+
+    // 4階層ページングにおける、仮想アドレスの分割
+    // 63:48 : 全部1 or 全部0
+    // 47:39 : PML4の添字として利用
+    // 38:30 : PDPの添字として利用
+    // 29:21 : PDの添字として利用
+    // 20:12 : PTの添字として利用
+    // 11:0  : offset。PT[n]にこれを加算することで最終的な物理アドレスになる
+    // 63:48の制約により、プログラマが使える仮想アドレスは
+    // [0x0000000000000000, 0x00007fffffffffff]と[0xffff800000000000, 0xffffffffffffffff]の両端部分のみ（カノニカルアドレス）
+    // どちらかにOS、逆側にアプリを配置する
+    // MikanOSでは下位にOS、上位にアプリを配置する
 } // namespace
 
 void SetupIdentityPageTable() {

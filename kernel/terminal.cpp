@@ -6,6 +6,8 @@
 #include "asmfunc.h"
 #include "font.hpp"
 #include "layer.hpp"
+#include "memory_manager.hpp"
+#include "paging.hpp"
 #include "pci.hpp"
 
 namespace {
@@ -38,6 +40,185 @@ namespace {
         }
 
         return argv;
+    }
+
+    Elf64_Phdr* GetProgramHeader(Elf64_Ehdr* ehdr) {
+        return reinterpret_cast<Elf64_Phdr*>(reinterpret_cast<uintptr_t>(ehdr) + ehdr->e_phoff);
+    }
+
+    uintptr_t GetFirstLoadAddress(Elf64_Ehdr* ehdr) {
+        auto phdr = GetProgramHeader(ehdr);
+        for (int i = 0; i < ehdr->e_phnum; i++) {
+            if (phdr[i].p_type != PT_LOAD) {
+                continue;
+            }
+            return phdr[i].p_vaddr;
+        }
+        return 0;
+    }
+
+    static_assert(kBytesPerFrame >= 4096);
+
+    /// 新たなページング構造を生成
+    WithError<PageMapEntry*> NewPageMap() {
+        auto frame = g_memory_manager->Allocate(1);
+        if (frame.error) {
+            return {nullptr, frame.error};
+        }
+
+        auto e = reinterpret_cast<PageMapEntry*>(frame.value.Frame());
+        memset(e, 0, sizeof(uint64_t) * 512);
+        return {e, MAKE_ERROR(Error::kSuccess)};
+    }
+
+    /// 必要に応じて新たなページング構造を生成してエントリに設定
+    WithError<PageMapEntry*> SetNewPageMapIfNotPresent(PageMapEntry& entry) {
+        // 有効な値が設定済み
+        if (entry.bits.present) {
+            return {entry.Pointer(), MAKE_ERROR(Error::kSuccess)};
+        }
+
+        auto [child_map, err] = NewPageMap();
+        if (err) {
+            return {nullptr, err};
+        }
+
+        entry.SetPointer(child_map);
+        entry.bits.present = 1;
+
+        return {child_map, MAKE_ERROR(Error::kSuccess)};
+    }
+
+    /// 指定階層を設定
+    /// page_map : 階層ページング構造の物理アドレス
+    /// page_map_level : 設定対象のページング階層
+    /// addr : LOADセグメントを配置する先頭アドレス
+    /// num_4kPages : 4KiBページ単位のセグメントの大きさ
+    /// ret : 未処理のページ数
+    WithError<size_t> SetupPageMap(PageMapEntry* page_map, int page_map_level, LinearAddress4Level addr, size_t num_4kPages) {
+        while (num_4kPages > 0) {
+            // 仮想アドレスの指定した階層の値
+            const auto entry_index = addr.Part(page_map_level);
+
+            auto [child_map, err] = SetNewPageMapIfNotPresent(page_map[entry_index]);
+            if (err) {
+                return {num_4kPages, err};
+            }
+            page_map[entry_index].bits.writable = 1;
+
+            if (page_map_level == 1) {
+                num_4kPages--;
+            } else {
+                auto [num_remain_pages, err] = SetupPageMap(child_map, page_map_level - 1, addr, num_4kPages);
+                if (err) {
+                    return {num_4kPages, err};
+                }
+                num_4kPages = num_remain_pages;
+            }
+
+            if (entry_index == 511) {
+                break;
+            }
+
+            addr.SetPart(page_map_level, entry_index + 1);
+            for (int level = page_map_level - 1; level >= 1; level--) {
+                addr.SetPart(level, 0);
+            }
+        }
+
+        return {num_4kPages, MAKE_ERROR(Error::kSuccess)};
+    }
+
+    /// 階層ページング構造の設定
+    /// addr : LOADセグメントを配置する先頭アドレス
+    /// num_4kPages : 4KiBページ単位のセグメントの大きさ
+    Error SetupPageMaps(LinearAddress4Level addr, size_t num_4kpages) {
+        auto pml4_table = reinterpret_cast<PageMapEntry*>(GetCR3());
+        return SetupPageMap(pml4_table, 4, addr, num_4kpages).error;
+    }
+
+    /// LOADセグメントを最終目的地にコピー
+    Error CopyLoadSegments(Elf64_Ehdr* ehdr) {
+        auto phdr = GetProgramHeader(ehdr);
+        for (int i = 0; i < ehdr->e_phnum; i++) {
+            if (phdr[i].p_type != PT_LOAD) {
+                continue;
+            }
+
+            // 階層ページング構造の設定
+            LinearAddress4Level dest_addr;
+            dest_addr.value = phdr[i].p_vaddr;
+            const auto num_4kpages = (phdr[i].p_memsz + 4096) / 4096;
+            if (auto err = SetupPageMaps(dest_addr, num_4kpages)) {
+                return err;
+            }
+
+            const auto src = reinterpret_cast<uint8_t*>(ehdr) + phdr[i].p_offset;
+            const auto dst = reinterpret_cast<uint8_t*>(phdr[i].p_vaddr);
+            memcpy(dst, src, phdr[i].p_filesz);
+            memcpy(dst + phdr[i].p_filesz, 0, phdr[i].p_memsz - phdr[i].p_filesz);
+        }
+        return MAKE_ERROR(Error::kSuccess);
+    }
+
+    /// elfファイルをアプリとして読み込み、実行可能にする
+    Error LoadElf(Elf64_Ehdr* ehdr) {
+        // elfファイルは実行可能か？
+        if (ehdr->e_type != ET_EXEC) {
+            return MAKE_ERROR(Error::kInvalidFormat);
+        }
+
+        // 1つ目のLOADセグメントの仮想アドレスがカノニカルアドレスの後半領域か？
+        const auto addr_first = GetFirstLoadAddress(ehdr);
+        if (addr_first < 0xffff800000000000) {
+            return MAKE_ERROR(Error::kInvalidFormat);
+        }
+
+        if (auto err = CopyLoadSegments(ehdr)) {
+            return err;
+        }
+
+        return MAKE_ERROR(Error::kSuccess);
+    }
+
+    /// 指定階層のページング構造内のエントリをすべて破棄
+    Error CleanPageMap(PageMapEntry* page_map, int page_map_level) {
+        for (int i = 0; i < 512; i++) {
+            auto entry = page_map[i];
+            if (!entry.bits.present) {
+                continue;
+            }
+
+            // 深さ優先探索
+            if (page_map_level > 1) {
+                if (auto err = CleanPageMap(entry.Pointer(), page_map_level - 1)) {
+                    return err;
+                }
+            }
+
+            const auto entry_addr = reinterpret_cast<uintptr_t>(entry.Pointer());
+            const FrameID map_frame{entry_addr / kBytesPerFrame};
+            if (auto err = g_memory_manager->Free(map_frame, 1)) {
+                return err;
+            }
+            page_map[i].data = 0;
+        }
+
+        return MAKE_ERROR(Error::kSuccess);
+    }
+
+    /// アプリ用のページング構造を破棄
+    Error CleanPageMaps(LinearAddress4Level addr) {
+        auto pml4_table = reinterpret_cast<PageMapEntry*>(GetCR3());
+        auto pdp_table = pml4_table[addr.parts.pml4].Pointer();
+        pml4_table[addr.parts.pml4].data = 0;
+        if (auto err = CleanPageMap(pdp_table, 3)) {
+            return err;
+        }
+
+        const auto pdp_addr = reinterpret_cast<uintptr_t>(pdp_table);
+        const FrameID pdp_frame{pdp_addr / kBytesPerFrame};
+        return g_memory_manager->Free(pdp_frame, 1);
     }
 } // namespace
 
@@ -219,28 +400,17 @@ void Terminal::ExecuteLine() {
             Print("no such command: ");
             Print(command);
             Print("\n");
-        } else {
-            ExecuteFile(*file_entry, command, first_arg);
+        } else if (auto err = ExecuteFile(*file_entry, command, first_arg)) {
+            Print("failed to exec file: ");
+            Print(err.Name());
+            Print("\n");
         }
     }
 }
 
-void Terminal::ExecuteFile(const fat::DirectoryEntry& file_entry, char* command, char* first_arg) {
-    auto cluster = file_entry.FirstCluster();
-    auto remain_bytes = file_entry.file_size;
-
-    std::vector<uint8_t> file_buf(remain_bytes);
-    auto p = &file_buf[0];
-
-    while (cluster != 0 && cluster != fat::kEndOfClusterchain) {
-        const auto copy_bytes = fat::g_bytes_per_cluster < remain_bytes ? fat::g_bytes_per_cluster : remain_bytes;
-        memcpy(p, fat::GetSectorByCluster<uint8_t>(cluster), copy_bytes);
-
-        remain_bytes -= copy_bytes;
-        p += copy_bytes;
-        // 複数クラスタにまたがる場合にも対応
-        cluster = fat::NextCluster(cluster);
-    }
+Error Terminal::ExecuteFile(const fat::DirectoryEntry& file_entry, char* command, char* first_arg) {
+    std::vector<uint8_t> file_buf(file_entry.file_size);
+    fat::LoadFile(&file_buf[0], file_buf.size(), file_entry);
 
     auto elf_header = reinterpret_cast<Elf64_Ehdr*>(&file_buf[0]);
     // フラットバイナリ（ファイルの先頭に実行可能な機械語が配置されている）の場合
@@ -250,15 +420,17 @@ void Terminal::ExecuteFile(const fat::DirectoryEntry& file_entry, char* command,
         using Func = void();
         auto f = reinterpret_cast<Func*>(&file_buf[0]);
         f();
-        return;
+        return MAKE_ERROR(Error::kSuccess);
     }
 
     // elf形式の場合
     auto argv = MakeArgVector(command, first_arg);
+    if (auto err = LoadElf(elf_header)) {
+        return err;
+    }
 
+    // エントリポイントのアドレスを取得し、実行
     auto entry_addr = elf_header->e_entry;
-    // 実際に配置されるメモリアドレスを加算
-    entry_addr += reinterpret_cast<uintptr_t>(&file_buf[0]);
     using Func = int(int, char**);
     auto f = reinterpret_cast<Func*>(entry_addr);
     auto ret = f(argv.size(), &argv[0]);
@@ -266,6 +438,14 @@ void Terminal::ExecuteFile(const fat::DirectoryEntry& file_entry, char* command,
     char s[64];
     sprintf(s, "app exited. ret = %d\n", ret);
     Print(s);
+
+    // アプリ終了後、使用したメモリ領域を解放
+    const auto addr_first = GetFirstLoadAddress(elf_header);
+    if (auto err = CleanPageMaps(LinearAddress4Level{addr_first})) {
+        return err;
+    }
+
+    return MAKE_ERROR(Error::kSuccess);
 }
 
 void Terminal::Print(const char* s) {

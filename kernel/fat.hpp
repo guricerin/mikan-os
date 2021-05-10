@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 namespace fat {
@@ -112,4 +113,11 @@ namespace fat {
 
     /// 指定のファイル名と一致 : true
     bool NameIsEqual(const DirectoryEntry& entry, const char* name);
+
+    /// 指定ファイルの内容をバッファへコピー
+    /// buf : コピー先
+    /// len : バッファの大きさ（byte単位）
+    /// entry : ファイルを表すディレクトリエントリ
+    /// ret : 読み込んだバイト数
+    size_t LoadFile(void* buf, size_t len, const DirectoryEntry& entry);
 } // namespace fat

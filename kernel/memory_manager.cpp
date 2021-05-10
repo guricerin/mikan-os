@@ -69,7 +69,6 @@ extern "C" caddr_t g_program_break, g_program_break_end;
 
 namespace {
     char g_memory_manager_buf[sizeof(BitmapMemoryManager)];
-    BitmapMemoryManager* g_memory_manager;
 
     Error InitializeHeap(BitmapMemoryManager& memory_manager) {
         // 128MiB
@@ -84,6 +83,8 @@ namespace {
         return MAKE_ERROR(Error::kSuccess);
     }
 } // namespace
+
+BitmapMemoryManager* g_memory_manager;
 
 void InitializeMemoryManager(const MemoryMap& memory_map) {
     ::g_memory_manager = new (g_memory_manager_buf) BitmapMemoryManager;
