@@ -78,7 +78,7 @@ public:
     /// 待機列には追加しない
     Task& NewTask();
     /// タスク切替え
-    void SwitchTask(bool current_sleep = false);
+    void SwitchTask(const TaskContext& current_ctx);
     /// タスクをスリープ状態にする（待機列から除外）
     void Sleep(Task* task);
     Error Sleep(uint64_t id);
@@ -105,6 +105,8 @@ private:
     bool level_changed_{false};
 
     void ChangeLevelRunning(Task* task, int level);
+    /// ランキューの戦闘要素を末尾に移動
+    Task* RotateCurrentRunQueue(bool current_sleep);
 };
 
 extern TaskManager* g_task_manager;

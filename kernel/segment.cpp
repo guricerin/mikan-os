@@ -1,10 +1,18 @@
 #include "segment.hpp"
 
 #include "asmfunc.h"
+#include "interrupt.hpp"
+#include "logger.hpp"
+#include "memory_manager.hpp"
 
 namespace {
-    /// Global Discriptor Table
-    std::array<SegmentDescriptor, 5> g_gdt;
+    /// GDT : Global Discriptor Table
+    std::array<SegmentDescriptor, 7> g_gdt;
+    /// TSS : Task-State Segment
+    /// TSS用のセグメントはGDTの2要素分を消費する
+    std::array<uint32_t, 26> g_tss;
+
+    static_assert((kTSS >> 3) + 1 < g_gdt.size());
 } // namespace
 
 void SetCodeSegment(SegmentDescriptor& desc,
@@ -44,6 +52,17 @@ void SetDataSegment(SegmentDescriptor& desc,
     desc.bits.default_operation_size = 1;
 }
 
+/// system segmentビットが0であるセグメントを設定
+void SetSystemSegment(SegmentDescriptor& desc,
+                      DescriptorType type,
+                      unsigned int descriptor_privilege_level,
+                      uint32_t base,
+                      uint32_t limit) {
+    SetCodeSegment(desc, type, descriptor_privilege_level, base, limit);
+    desc.bits.system_segment = 0;
+    desc.bits.long_mode = 0;
+}
+
 /// セグメントの設定（GDTを再構築）
 void SetupSegments() {
     // null descriptor（GDTの0番目は使用されない）
@@ -65,4 +84,27 @@ void InitializeSegmentation() {
     // ヌルディスクリプタにする
     SetDSAll(kKernelDS);
     SetCSSS(kKernelCS, kKernelSS);
+}
+
+void InitializeTSS() {
+    const int kRSP0Frames = 8;
+    auto [stack0, err] = g_memory_manager->Allocate(kRSP0Frames);
+    if (err) {
+        Log(kError, "failed to allocate rsp0: %s\n", err.Name());
+        exit(1);
+    }
+
+    uint64_t rsp0 = reinterpret_cast<uint64_t>(stack0.Frame()) + kRSP0Frames * 4096;
+    g_tss[1] = rsp0 & 0xffffffff;
+    g_tss[2] = rsp0 >> 32;
+
+    uint64_t tss_addr = reinterpret_cast<uint64_t>(&g_tss[0]);
+    // GDT[5]にTSSの先頭アドレスを設定
+    SetSystemSegment(g_gdt[kTSS >> 3], DescriptorType::kTSSAvailable, 0, tss_addr & 0xffffffff, sizeof(g_tss) - 1);
+    // GDT[6]にTSSの先頭アドレスを設定
+    g_gdt[(kTSS >> 3) + 1].data = tss_addr >> 32;
+
+    // 割り込みが発生してCPL=3からCPL=0に切り替わる際（権限がアプリレベルからOSレベルに変化）TSSの値を読む必要が出ると、
+    // CPUはTRレジスタが指すGDTエントリを参照してTSSを取得するので設定しておく
+    LoadTR(kTSS);
 }

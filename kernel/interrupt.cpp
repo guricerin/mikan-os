@@ -31,11 +31,6 @@ namespace {
         g_task_manager->SendMessage(1, Message{Message::kInterruptXHCI});
         NotifyEndOfInterrupt();
     }
-
-    /// LAPCIタイマ用割り込みハンドラ
-    __attribute__((interrupt)) void IntHandlerLAPCITimer(InterruptFrame* frame) {
-        LAPICTimerOnInterrupt();
-    }
 } // namespace
 
 void InitializeInterrupt() {
@@ -46,7 +41,7 @@ void InitializeInterrupt() {
                 kKernelCS);
     SetIDTEntry(g_idt[InterruptVector::kLAPICTimer],
                 MakeIDTAttr(DescriptorType::kInterruptGate, 0),
-                reinterpret_cast<uint64_t>(IntHandlerLAPCITimer),
+                reinterpret_cast<uint64_t>(IntHandlerLAPICTimer),
                 kKernelCS);
     LoadIDT(sizeof(g_idt) - 1, reinterpret_cast<uintptr_t>(&g_idt[0]));
 }

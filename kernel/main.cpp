@@ -125,6 +125,7 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
     InitializeSegmentation();
     InitializePaging();
     InitializeMemoryManager(memory_map);
+    InitializeTSS();
     // 割り込み
     InitializeInterrupt();
 

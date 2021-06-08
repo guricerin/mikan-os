@@ -99,12 +99,13 @@ void TimerManager::AddTimer(const Timer& timer) {
 TimerManager* g_timer_manager;
 unsigned long g_lapic_timer_freq;
 
-void LAPICTimerOnInterrupt() {
+/// ctx_stack : 割り込みフレームの情報を使って構築したコンテキスト構造体）
+extern "C" void LAPICTimerOnInterrupt(const TaskContext& ctx_stack) {
     const bool task_timer_timeout = g_timer_manager->Tick();
     // タスク切り替えの前にコールしておかないと、タスク切り替え後にタイマ割り込みがこなくなる
     NotifyEndOfInterrupt();
 
     if (task_timer_timeout) {
-        g_task_manager->SwitchTask();
+        g_task_manager->SwitchTask(ctx_stack);
     }
 }

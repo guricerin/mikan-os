@@ -20,6 +20,12 @@ void SetCR3(uint64_t value);
 uint64_t GetCR3();
 /// コンテキストを切り替える
 void SwitchContext(void* next_ctx, void* current_ctx);
+/// コンテキストを復帰
+void RestoreContext(void* ctx);
 /// 指定アプリを指定の環境で呼び出す
 void CallApp(int argc, char** argv, uint16_t cs, uint16_t ss, uint64_t rip, uint64_t rsp);
+/// LAPICタイマ用割り込みハンドラ
+void IntHandlerLAPICTimer();
+/// TRレジスタを設定
+void LoadTR(uint16_t sel);
 }

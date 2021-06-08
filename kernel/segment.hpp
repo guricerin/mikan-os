@@ -56,9 +56,13 @@ void SetDataSegment(SegmentDescriptor& desc,
                     uint32_t base,
                     uint32_t limit);
 
+/// それぞれ、GDTのどのインデックスに配置されるかを表す
 const uint16_t kKernelCS = 1 << 3;
 const uint16_t kKernelSS = 2 << 3;
 const uint16_t kKernelDS = 0;
+const uint16_t kTSS = 5 << 3; // GDT[5]
 
 void SetupSegments();
 void InitializeSegmentation();
+/// TSSを初期化してGDTに設定する
+void InitializeTSS();
