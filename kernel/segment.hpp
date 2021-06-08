@@ -22,7 +22,7 @@ union SegmentDescriptor {
         DescriptorType type : 4;
         /// 1 : コードセグメント or データセグメント
         uint64_t system_segment : 1;
-        /// 権限レベル
+        /// DPL（権限レベル）
         /// 0 : 特権モード、カーネルモード
         /// 3 : ユーザーモード
         uint64_t descriptor_privilege_level : 2;

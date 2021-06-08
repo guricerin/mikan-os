@@ -11,12 +11,28 @@
 #include "pci.hpp"
 
 namespace {
-    /// 空白区切りのコマンドライン引数を配列に詰めて返す
-    std::vector<char*> MakeArgVector(char* command, char* first_arg) {
-        std::vector<char*> argv;
-        argv.push_back(command);
+    /// 空白区切りのコマンドライン引数を配列（argbuf）に詰める
+    WithError<int> MakeArgVector(char* command, char* first_arg, char** argv, int argv_len, char* argbuf, int argbuf_len) {
+        int argc = 0;
+        int argbuf_index = 0;
+
+        auto push_to_argv = [&](const char* s) {
+            if (argc >= argv_len || argbuf_index >= argbuf_len) {
+                return MAKE_ERROR(Error::kFull);
+            }
+
+            argv[argc] = &argbuf[argbuf_index];
+            argc++;
+            strcpy(&argbuf[argbuf_index], s);
+            argbuf_index += strlen(s) + 1;
+            return MAKE_ERROR(Error::kSuccess);
+        };
+
+        if (auto err = push_to_argv(command)) {
+            return {argc, err};
+        }
         if (!first_arg) {
-            return argv;
+            return {argc, MAKE_ERROR(Error::kSuccess)};
         }
 
         char* p = first_arg;
@@ -27,19 +43,25 @@ namespace {
             if (p[0] == 0) {
                 break;
             }
-            argv.push_back(p);
 
+            const char* arg = p;
             while (p[0] != 0 && !isspace(p[0])) {
                 p++;
             }
-            if (p[0] == 0) {
+
+            const bool is_end = p[0] == 0;
+            p[0] = 0;
+            if (auto err = push_to_argv(arg)) {
+                return {argc, err};
+            }
+            if (is_end) {
                 break;
             }
-            p[0] = 0;
+
             p++;
         }
 
-        return argv;
+        return {argc, MAKE_ERROR(Error::kSuccess)};
     }
 
     Elf64_Phdr* GetProgramHeader(Elf64_Ehdr* ehdr) {
@@ -105,6 +127,10 @@ namespace {
                 return {num_4kPages, err};
             }
             page_map[entry_index].bits.writable = 1;
+            // 権限レベルが最低でも命令フェッチを許可する
+            // この関数はアプリ用の階層ページング構造を設定するものなので、OS領域のuserビットは0のまま変更していない
+            // -> OSのメモリ空間は保護される
+            page_map[entry_index].bits.user = 1;
 
             if (page_map_level == 1) {
                 num_4kPages--;
@@ -424,20 +450,36 @@ Error Terminal::ExecuteFile(const fat::DirectoryEntry& file_entry, char* command
     }
 
     // elf形式の場合
-    auto argv = MakeArgVector(command, first_arg);
     if (auto err = LoadElf(elf_header)) {
+        return err;
+    }
+
+    // コマンドライン引数を取得
+    // アプリ用のページにargvを構築
+    LinearAddress4Level args_frame_addr{0xfffffffffffff000};
+    if (auto err = SetupPageMaps(args_frame_addr, 1)) {
+        return err;
+    }
+    // new演算子はsbrk()（OS用のアドレス空間に存在するメモリ領域を使う）を呼び出してしまうので、使用しない
+    // アプリ用の領域（userビットを1としたページ）に用意する
+    auto argv = reinterpret_cast<char**>(args_frame_addr.value);
+    // argvの要素数（決め打ちで32個を上限とする）
+    int argv_len = 32; // argv = 8x32 = 256bytes
+    auto argbuf = reinterpret_cast<char*>(args_frame_addr.value + sizeof(char**) * argv_len);
+    int argbuf_len = 4096 - sizeof(char**) * argv_len;
+    auto argc = MakeArgVector(command, first_arg, argv, argv_len, argbuf, argbuf_len);
+    if (argc.error) {
+        return argc.error;
+    }
+
+    LinearAddress4Level stack_frame_addr{0xffffffffffffe000};
+    if (auto err = SetupPageMaps(stack_frame_addr, 1)) {
         return err;
     }
 
     // エントリポイントのアドレスを取得し、実行
     auto entry_addr = elf_header->e_entry;
-    using Func = int(int, char**);
-    auto f = reinterpret_cast<Func*>(entry_addr);
-    auto ret = f(argv.size(), &argv[0]);
-
-    char s[64];
-    sprintf(s, "app exited. ret = %d\n", ret);
-    Print(s);
+    CallApp(argc.value, argv, 3 << 3 | 3, 4 << 3 | 3, entry_addr, stack_frame_addr.value + 4096 - 8);
 
     // アプリ終了後、使用したメモリ領域を解放
     const auto addr_first = GetFirstLoadAddress(elf_header);

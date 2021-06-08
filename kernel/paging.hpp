@@ -83,6 +83,7 @@ union PageMapEntry {
         uint64_t present : 1;
         /// エントリが表す仮想アドレス範囲への書き込みを許可 : 1
         uint64_t writable : 1;
+        /// CPL（Current Privilege Level, CSのRPLフィールド、CPUの現在の動作権限レベル）がどんな値でもメモリアクセスを許可 : 1
         uint64_t user : 1;
         uint64_t write_through : 1;
         uint64_t cache_disable : 1;
