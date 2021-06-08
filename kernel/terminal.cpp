@@ -479,7 +479,7 @@ Error Terminal::ExecuteFile(const fat::DirectoryEntry& file_entry, char* command
 
     // エントリポイントのアドレスを取得し、実行
     auto entry_addr = elf_header->e_entry;
-    CallApp(argc.value, argv, 3 << 3 | 3, 4 << 3 | 3, entry_addr, stack_frame_addr.value + 4096 - 8);
+    CallApp(argc.value, argv, 4 << 3 | 3, 3 << 3 | 3, entry_addr, stack_frame_addr.value + 4096 - 8);
 
     // アプリ終了後、使用したメモリ領域を解放
     const auto addr_first = GetFirstLoadAddress(elf_header);

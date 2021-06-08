@@ -25,6 +25,7 @@
 #include "paging.hpp"
 #include "pci.hpp"
 #include "segment.hpp"
+#include "syscall.hpp"
 #include "task.hpp"
 #include "terminal.hpp"
 #include "timer.hpp"
@@ -152,6 +153,9 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
     // 0,5secでタイムアウトするタイマ
     g_timer_manager->AddTimer(Timer{kTimer05sec, kTextboxCursorTimer});
     bool textbox_cursor_visible = false;
+
+    // システムコール
+    InitializeSyscall();
 
     // マルチタスク
     InitializeTask();

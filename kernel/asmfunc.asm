@@ -259,3 +259,40 @@ global LoadTR
 LoadTR:  ; void LoadTR(uint16_t sel);
     ltr di
     ret
+
+global WriteMSR
+WriteMSR:  ; void WriteMSR(uint32_t msr, uint64_t value);
+    mov rdx, rsi
+    shr rdx, 32
+    mov eax, esi
+    ; モデル固有レジスタは、ECXにレジスタ番号を設定することで指定する
+    mov ecx, edi
+    wrmsr
+    ret
+
+extern syscall_table
+global SyscallEntry
+SyscallEntry:  ; void SyscallEntry(void);
+    push rbp
+    push rcx  ; original RIP
+    push r11  ; original RFLAGS
+
+    mov rcx, r10
+    ; システムコール番号の最上位ビットをマスク（添字が巨大になるのを防ぐ）
+    and eax, 0x7fffffff
+    mov rbp, rsp
+    and rsp, 0xfffffffffffffff0
+
+    ; 関数ポインタ表からシステムコール番号に応じた関数ポインタを取得して実行
+    call [syscall_table + 8 * eax]
+    ; rbx, r12-r15 は callee-saved なので呼び出し側で保存しない
+    ; rax は戻り値用なので呼び出し側で保存しない
+
+    mov rsp, rbp
+
+    ; original RFLAGSを復帰
+    pop r11
+    ; original RIPを復帰
+    pop rcx
+    pop rbp
+    o64 sysret

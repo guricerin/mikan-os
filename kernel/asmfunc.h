@@ -28,4 +28,9 @@ void CallApp(int argc, char** argv, uint16_t cs, uint16_t ss, uint64_t rip, uint
 void IntHandlerLAPICTimer();
 /// TRレジスタを設定
 void LoadTR(uint16_t sel);
+/// 指定のモデル固有レジスタに値を設定
+/// モデル固有レジスタ : MSR, Model Specific Register
+void WriteMSR(uint32_t msr, uint64_t value);
+/// syscallでコールされるOS側の関数
+void SyscallEntry(void);
 }

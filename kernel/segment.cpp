@@ -72,8 +72,8 @@ void SetupSegments() {
     SetDataSegment(g_gdt[2], DescriptorType::kReadWrite, 0, 0, 0xfffff);
     // アプリ用のセグメントディスクリプタ
     // 権限レベルを最低にする
-    SetCodeSegment(g_gdt[3], DescriptorType::kExecuteRead, 3, 0, 0xfffff);
-    SetDataSegment(g_gdt[4], DescriptorType::kReadWrite, 3, 0, 0xfffff);
+    SetDataSegment(g_gdt[3], DescriptorType::kReadWrite, 3, 0, 0xfffff);
+    SetCodeSegment(g_gdt[4], DescriptorType::kExecuteRead, 3, 0, 0xfffff);
     // g_gdtを正式なGDTとしてCPUに登録
     LoadGDT(sizeof(g_gdt) - 1, reinterpret_cast<uintptr_t>(&g_gdt[0]));
 }

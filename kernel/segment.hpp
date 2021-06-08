@@ -57,10 +57,12 @@ void SetDataSegment(SegmentDescriptor& desc,
                     uint32_t limit);
 
 /// それぞれ、GDTのどのインデックスに配置されるかを表す
-const uint16_t kKernelCS = 1 << 3;
-const uint16_t kKernelSS = 2 << 3;
 const uint16_t kKernelDS = 0;
-const uint16_t kTSS = 5 << 3; // GDT[5]
+const uint16_t kKernelCS = 1 << 3; // GDT[1] : OS用のコードセグメント
+const uint16_t kKernelSS = 2 << 3; // GDT[2] : OS用のスタックセグメント
+// GDT[3] : アプリ用のコードセグメント
+// GDT[4] : アプリ用のスタックセグメント
+const uint16_t kTSS = 5 << 3; // GDT[5] : TSS
 
 void SetupSegments();
 void InitializeSegmentation();
