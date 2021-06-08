@@ -7,7 +7,7 @@ readonly LOADER_PATH=$HOME/edk2
 readonly OSBOOK_DEVENV_PATH=$HOME/osbook/devenv
 
 build_loader() {
-	cd $LOADER_PATH && source ./edksetup.sh && build
+    cd $LOADER_PATH && source ./edksetup.sh && build
     cd $SCRIPT_ROOT
 }
 

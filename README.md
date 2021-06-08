@@ -1,4 +1,4 @@
-# mikanos
+# mikanos-shakyo
 
 [WIP]  
 [『ゼロからのOS自作入門』](https://zero.osdev.jp/)の写経。写経元のソースコードは[こちら](https://github.com/uchan-nos/mikanos)。  
@@ -22,4 +22,10 @@ $ ./tools/setup.sh
 
 ```bash
 export DISPLAY=$(awk '/nameserver / {print $2; exit}' /etc/resolv.conf 2>/dev/null):0
+```
+
+## 実行
+
+```bash
+./build.sh run
 ```
