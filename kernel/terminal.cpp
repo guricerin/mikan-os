@@ -477,9 +477,21 @@ Error Terminal::ExecuteFile(const fat::DirectoryEntry& file_entry, char* command
         return err;
     }
 
+    __asm__("cli");
+    auto& task = g_task_manager->CurrentTask();
+    __asm__("sti");
+
     // エントリポイントのアドレスを取得し、実行
     auto entry_addr = elf_header->e_entry;
-    CallApp(argc.value, argv, 4 << 3 | 3, 3 << 3 | 3, entry_addr, stack_frame_addr.value + 4096 - 8);
+    int ret = CallApp(argc.value,
+                      argv,
+                      3 << 3 | 3,
+                      entry_addr,
+                      stack_frame_addr.value + 4096 - 8,
+                      &task.OSStackPointer()); // アプリ終了時に復帰するスタックポインタ
+
+    char s[64];
+    sprintf(s, "app exited. ret = %d\n", ret);
 
     // アプリ終了後、使用したメモリ領域を解放
     const auto addr_first = GetFirstLoadAddress(elf_header);

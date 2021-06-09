@@ -37,6 +37,7 @@ public:
     /// f : 実際に実行されるタスク（関数）
     Task& InitContext(TaskFunc* f, int64_t data);
     TaskContext& Context();
+    uint64_t& OSStackPointer();
     uint64_t ID() const;
     Task& Sleep();
     Task& Wakeup();
@@ -52,6 +53,8 @@ private:
     /// スタック領域
     std::vector<uint64_t> stack_;
     alignas(16) TaskContext context_;
+    /// OS用スタックポインタ（アプリ終了時からの復帰に必要）
+    uint64_t os_stack_pointer_;
     /// 割り込みメッセージキュー
     std::deque<Message> msgs_;
     unsigned int level_{kDefaultLevel};

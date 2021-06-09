@@ -59,6 +59,15 @@ namespace syscall {
         }
         return {0, EBADF};
     }
+
+    /// アプリ終了
+    /// arg1 : 終了時コード
+    SYSCALL(Exit) {
+        __asm__("cli");
+        auto& task = g_task_manager->CurrentTask();
+        __asm__("sti");
+        return {task.OSStackPointer(), static_cast<int>(arg1)};
+    }
 #undef SYSCALL
 
 } // namespace syscall
@@ -67,9 +76,10 @@ using SyscallFuncType = syscall::Result(uint64_t, uint64_t, uint64_t, uint64_t, 
 
 /// システムコールの（関数ポインタ）テーブル
 /// この添字に0x80000000を足した値をシステムコール番号とする
-extern "C" std::array<SyscallFuncType*, 2> g_syscall_table{
+extern "C" std::array<SyscallFuncType*, 3> g_syscall_table{
     /* 0x00 */ syscall::LogString,
     /* 0x01 */ syscall::PutString,
+    /* 0x02 */ syscall::Exit,
 };
 
 void InitializeSyscall() {

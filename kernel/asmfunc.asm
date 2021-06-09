@@ -179,13 +179,21 @@ RestoreContext:  ; void RestoreContext(void* task_context);
     o64 iret
 
 global CallApp
-CallApp:  ; void CallApp(int argc, char** argv, uint16_t cs, uint16_t ss, uint64_t rip, uint64_t rsp);
+CallApp:  ; int CallApp(int argc, char** argv, uint16_t ss, uint64_t rip, uint64_t rsp, uint64_t* os_stack_ptr);
+    ; 各レジスタをOS用スタックに保存
+    push rbx
     push rbp
-    mov rbp, rsp
-    push rcx  ; SS
-    push r9   ; RSP
+    push r12
+    push r13
+    push r14
+    push r15
+    mov [r9], rsp ; OS 用のスタックポインタを保存
+
+    push rdx  ; SS
+    push r8   ; RSP
+    add rdx, 8
     push rdx  ; CS
-    push r8   ; RIP
+    push rcx  ; RIP
     o64 retf
     ; アプリケーションが終了してもここには来ない
 
@@ -277,6 +285,8 @@ SyscallEntry:  ; void SyscallEntry(void);
     push rcx  ; original RIP
     push r11  ; original RFLAGS
 
+    push rax  ; システムコール番号を保存
+
     mov rcx, r10
     ; システムコール番号の最上位ビットをマスク（添字が巨大になるのを防ぐ）
     and eax, 0x7fffffff
@@ -290,9 +300,29 @@ SyscallEntry:  ; void SyscallEntry(void);
 
     mov rsp, rbp
 
+    pop rsi  ; システムコール番号を復帰
+    cmp esi, 0x80000002 ; アプリ終了システムコールの番号（3番目に作成したので02とする）
+    je  .exit
+
     ; original RFLAGSを復帰
     pop r11
     ; original RIPを復帰
     pop rcx
     pop rbp
     o64 sysret
+
+; アプリを終了させてOSに戻る
+.exit:
+    ; スタックをアプリ用からOS用に切替え、CallApp()の戻り値を設定
+    mov rsp, rax
+    mov eax, edx
+
+    ; CallApp()呼び出し時のレジスタをOS用スタックから復帰
+    pop r15
+    pop r14
+    pop r13
+    pop r12
+    pop rbp
+    pop rbx
+
+    ret  ; CallApp の次の行に飛ぶ
