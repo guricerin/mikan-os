@@ -248,7 +248,7 @@ namespace {
     }
 } // namespace
 
-Terminal::Terminal() {
+Terminal::Terminal(uint64_t task_id) : task_id_{task_id} {
     window_ = std::make_shared<TopLevelWindow>(
         kColumns * 8 + 8 + TopLevelWindow::kMarginX,
         kRows * 16 + 8 + TopLevelWindow::kMarginY,
@@ -490,15 +490,34 @@ Error Terminal::ExecuteFile(const fat::DirectoryEntry& file_entry, char* command
     return MAKE_ERROR(Error::kSuccess);
 }
 
-void Terminal::Print(const char* s) {
+void Terminal::Print(const char* s, std::optional<size_t> len) {
+    const auto cursor_before = CalcCursorPos();
     DrawCursor(false);
 
-    while (*s) {
-        Print(*s);
-        s++;
+    if (len) { // バイト数を指定する場合
+        for (size_t i = 0; i < *len; i++) {
+            Print(*s);
+            s++;
+        }
+    } else { // バイト数を指定しない場合
+        while (*s) {
+            Print(*s);
+            s++;
+        }
     }
 
     DrawCursor(true);
+    const auto cursor_after = CalcCursorPos();
+
+    Vector2D<int> draw_pos{TopLevelWindow::kTopLeftMargin.x, cursor_before.y};
+    Vector2D<int> draw_size{window_->InnerSize().x, cursor_after.y - cursor_before.y + 16};
+    Rectangle<int> draw_area{draw_pos, draw_size};
+
+    // 画面を再描画
+    Message msg = MakeLayerMessage(task_id_, LayerID(), LayerOperation::DrawArea, draw_area);
+    __asm__("cli");
+    g_task_manager->SendMessage(1, msg);
+    __asm__("sti");
 }
 
 void Terminal::Print(char c) {
@@ -550,14 +569,18 @@ Rectangle<int> Terminal::HistoryUpDown(int direction) {
     return draw_area;
 }
 
+std::map<uint64_t, Terminal*>* g_terminals;
+
 void TaskTerminal(uint64_t task_id, int64_t data) {
     // グローバル変数を扱う際は割り込みを禁止しておくのが無難
     __asm__("cli");
     Task& task = g_task_manager->CurrentTask();
-    Terminal* terminal = new Terminal;
+    Terminal* terminal = new Terminal{task_id};
     g_layer_manager->Move(terminal->LayerID(), {100, 200});
     g_active_layer->Activate(terminal->LayerID());
     g_layer_task_map->insert(std::make_pair(terminal->LayerID(), task_id));
+    // ターミナルのタスクが起動する時、自分自身を対応表に登録
+    (*g_terminals)[task_id] = terminal;
     __asm__("sti");
 
     while (true) {

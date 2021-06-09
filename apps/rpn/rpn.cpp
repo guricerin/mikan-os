@@ -1,4 +1,5 @@
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 
@@ -28,23 +29,22 @@ extern "C" int main(int argc, char** argv) {
             long b = Pop();
             long a = Pop();
             Push(a + b);
-            SyscallLogString(kWarn, "+");
         } else if (strcmp(argv[i], "-") == 0) {
             long b = Pop();
             long a = Pop();
             Push(a - b);
-            SyscallLogString(kWarn, "-");
         } else {
             long a = atol(argv[i]);
             Push(a);
-            SyscallLogString(kWarn, "#");
         }
     }
 
-    if (g_stack_ptr < 0) {
-        return 0;
+    long result = 0;
+    if (g_stack_ptr >= 0) {
+        result = Pop();
     }
-    SyscallLogString(kWarn, "\nhello, this is rpn\n");
+
+    printf("%ld\n", result);
     while (1)
         ;
     return static_cast<int>(Pop());

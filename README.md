@@ -27,5 +27,5 @@ export DISPLAY=$(awk '/nameserver / {print $2; exit}' /etc/resolv.conf 2>/dev/nu
 ## 実行
 
 ```bash
-./build.sh run
+$ ./build.sh run
 ```

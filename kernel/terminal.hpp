@@ -4,6 +4,7 @@
 
 #include <deque>
 #include <map>
+#include <optional>
 
 #include "fat.hpp"
 #include "layer.hpp"
@@ -15,16 +16,18 @@ public:
     static const int kRows = 15, kColumns = 60;
     static const int kLineMax = 128;
 
-    Terminal();
+    Terminal(uint64_t task_id);
     unsigned int LayerID() const { return layer_id_; }
     /// カーソルの点滅を切り替え、カーソルの描画領域を返す
     Rectangle<int> BlinkCursor();
     // キー入力を受付け、再描画すべき範囲を返す
     Rectangle<int> InputKey(uint8_t modifier, uint8_t keycode, char ascii);
+    void Print(const char* s, std::optional<size_t> len = std::nullopt);
 
 private:
     std::shared_ptr<TopLevelWindow> window_;
     unsigned int layer_id_;
+    uint64_t task_id_;
     /// カーソルの現在位置
     Vector2D<int> cursor_{0, 0};
     bool cursol_visible_{false};
@@ -45,10 +48,12 @@ private:
     void ExecuteLine();
     /// 実行可能ファイル（カーネル本体に組み込まれていないアプリ）を読み込んで実行
     Error ExecuteFile(const fat::DirectoryEntry& file_entry, char* command, char* first_arg);
-    void Print(const char* s);
     void Print(char c);
     /// コマンド履歴を辿る
     Rectangle<int> HistoryUpDown(int direction);
 };
+
+/// タスクIDとターミナルの対応表
+extern std::map<uint64_t, Terminal*>* g_terminals;
 
 void TaskTerminal(uint64_t task_id, int64_t data);

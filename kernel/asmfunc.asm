@@ -270,7 +270,7 @@ WriteMSR:  ; void WriteMSR(uint32_t msr, uint64_t value);
     wrmsr
     ret
 
-extern syscall_table
+extern g_syscall_table
 global SyscallEntry
 SyscallEntry:  ; void SyscallEntry(void);
     push rbp
@@ -284,7 +284,7 @@ SyscallEntry:  ; void SyscallEntry(void);
     and rsp, 0xfffffffffffffff0
 
     ; 関数ポインタ表からシステムコール番号に応じた関数ポインタを取得して実行
-    call [syscall_table + 8 * eax]
+    call [g_syscall_table + 8 * eax]
     ; rbx, r12-r15 は callee-saved なので呼び出し側で保存しない
     ; rax は戻り値用なので呼び出し側で保存しない
 
