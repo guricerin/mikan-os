@@ -10,6 +10,7 @@
 #include "msr.hpp"
 #include "task.hpp"
 #include "terminal.hpp"
+#include "timer.hpp"
 
 namespace syscall {
     /// システムコールの戻り値型
@@ -88,41 +89,86 @@ namespace syscall {
         return {layer_id, 0};
     }
 
+    namespace {
+        /// 指定レイヤIDのウィンドウにfを行う
+        /// layer_id_falgs : 上位32bitを再描画フラグ（0bit目が1なら再描画しない）、下位32bitをレイヤID
+        template <class Func, class... Args>
+        Result DoWinFunc(Func f, uint64_t layer_id_flags, Args... args) {
+            const uint32_t layer_flags = layer_id_flags >> 32;
+            const unsigned int layer_id = layer_id_flags & 0xffffffff;
+
+            __asm__("cli");
+            auto layer = g_layer_manager->FindLayer(layer_id);
+            __asm__("sti");
+            if (layer == nullptr) {
+                return {0, EBADF};
+            }
+
+            const auto res = f(*layer->GetWindow(), args...);
+            if (res.error) {
+                return res;
+            }
+
+            if ((layer_flags & 1) == 0) {
+                __asm__("cli");
+                g_layer_manager->Draw(layer_id);
+                __asm__("sti");
+            }
+
+            return res;
+        }
+    } // namespace
+
     /// ウィンドウに文字列を表示
     SYSCALL(WinWriteString) {
-        const unsigned int layer_id = arg1;
-        const int x = arg2, y = arg3;
-        const uint32_t color = arg4;
-        const auto s = reinterpret_cast<const char*>(arg5);
+        return DoWinFunc(
+            [](Window& win, int x, int y, unsigned int color, const char* s) {
+                WriteString(*win.Writer(), {x, y}, s, ToColor(color));
+                return Result{0, 0};
+            },
+            arg1, arg2, arg3, arg4, reinterpret_cast<const char*>(arg5));
+    }
 
-        __asm__("cli");
-        auto layer = g_layer_manager->FindLayer(layer_id);
-        __asm__("sti");
-        if (layer == nullptr) {
-            return {0, EBADF};
-        }
+    /// ウィンドウの指定領域を塗りつぶす
+    SYSCALL(WinFillRectangle) {
+        return DoWinFunc(
+            [](Window& win, int x, int y, int w, int h, uint32_t color) {
+                FillRectangle(*win.Writer(), {x, y}, {w, h}, ToColor(color));
+                return Result{0, 0};
+            },
+            arg1, arg2, arg3, arg4, arg5, arg6);
+    }
 
-        WriteString(*layer->GetWindow()->Writer(), {x, y}, s, ToColor(color));
-        __asm__("cli");
-        g_layer_manager->Draw(layer_id);
-        __asm__("sti");
+    SYSCALL(GetCurrentTick) {
+        return {g_timer_manager->CurrentTick(), kTimerFreq};
+    }
 
-        return {0, 0};
+    /// 指定レイヤを再描画するだけ
+    SYSCALL(WinRedraw) {
+        return DoWinFunc(
+            [](Window&) {
+                return Result{0, 0};
+            },
+            arg1);
     }
 #undef SYSCALL
 
 } // namespace syscall
 
+/// 引数は上限6つ
 using SyscallFuncType = syscall::Result(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t);
 
 /// システムコールの（関数ポインタ）テーブル
 /// この添字に0x80000000を足した値をシステムコール番号とする
-extern "C" std::array<SyscallFuncType*, 5> g_syscall_table{
+extern "C" std::array<SyscallFuncType*, 8> g_syscall_table{
     /* 0x00 */ syscall::LogString,
     /* 0x01 */ syscall::PutString,
     /* 0x02 */ syscall::Exit,
     /* 0x03 */ syscall::OpenWindow,
     /* 0x04 */ syscall::WinWriteString,
+    /* 0x05 */ syscall::WinFillRectangle,
+    /* 0x06 */ syscall::GetCurrentTick,
+    /* 0x07 */ syscall::WinRedraw,
 };
 
 void InitializeSyscall() {

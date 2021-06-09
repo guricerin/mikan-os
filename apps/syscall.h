@@ -1,18 +1,31 @@
+#ifdef __cplusplus
 #include <cstddef>
 #include <cstdint>
 
-#include "../kernel/logger.hpp"
-
 extern "C" {
+#else
+#include <stddef.h>
+#include <stdint.h>
+#endif
+
+#include "../kernel/logger.hpp"
 
 struct SyscallResult {
     uint64_t value;
     int error;
 };
 
-SyscallResult SyscallLogString(LogLevel level, const char* message);
-SyscallResult SyscallPutString(uint64_t, uint64_t, uint64_t);
+struct SyscallResult SyscallLogString(enum LogLevel level, const char* message);
+struct SyscallResult SyscallPutString(uint64_t, uint64_t, uint64_t);
 void SyscallExit(int exit_code);
-SyscallResult SyscallOpenWindow(int w, int h, int x, int y, const char* title);
-SyscallResult SyscallWinWriteString(unsigned int layer_id, int x, int y, uint32_t color, const char* s);
-}
+struct SyscallResult SyscallOpenWindow(int w, int h, int x, int y, const char* title);
+
+#define LAYER_NO_REDRAW (0x00000001ull << 32)
+struct SyscallResult SyscallWinWriteString(uint64_t layer_id_flags, int x, int y, uint32_t color, const char* s);
+struct SyscallResult SyscallWinFillRectangle(uint64_t layer_id_flags, int x, int y, int w, int h, uint32_t color);
+struct SyscallResult SyscallGetCurrentTick();
+struct SyscallResult SyscallWinRedraw(uint64_t layer_id_flags);
+
+#ifdef __cplusplus
+} // extern "C"
+#endif
