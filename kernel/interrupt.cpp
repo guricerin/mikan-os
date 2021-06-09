@@ -102,7 +102,14 @@ void InitializeInterrupt() {
     };
     // IDTをCPUに登録
     set_idt_entry(InterruptVector::kXHCI, IntHandlerXHCI);
-    set_idt_entry(InterruptVector::kLAPICTimer, IntHandlerLAPICTimer);
+    // タイマ割り込みでISTを使うよう設定する
+    SetIDTEntry(g_idt[InterruptVector::kLAPICTimer],
+                MakeIDTAttr(DescriptorType::kInterruptGate,
+                            0,             // DPL
+                            true,          // present
+                            kISTForTimer), // IST
+                reinterpret_cast<uint64_t>(IntHandlerLAPICTimer),
+                kKernelCS);
     set_idt_entry(0, IntHandlerDE);
     set_idt_entry(1, IntHandlerDB);
     set_idt_entry(3, IntHandlerBP);

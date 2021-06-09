@@ -71,6 +71,12 @@ constexpr InterruptDescriptorAttribute MakeIDTAttr(
     return attr;
 }
 
+/// ISTのインデックス（[1, 7]まであり、どれを使うかは自由）
+/// IST : interrupt stack table
+/// 割り込みハンドラを実行する際、事前に設定しておいたスタックを必ず使うようにする仕組み
+/// ISTはTSSに含まれる
+const int kISTForTimer = 1;
+
 void SetIDTEntry(InterruptDescriptor& desc,
                  InterruptDescriptorAttribute attr,
                  uint64_t offset,

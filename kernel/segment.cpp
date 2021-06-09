@@ -8,11 +8,27 @@
 namespace {
     /// GDT : Global Discriptor Table
     std::array<SegmentDescriptor, 7> g_gdt;
-    /// TSS : Task-State Segment
+    /// TSS : task-state segment
+    /// タスク情報を保存するための構造体
     /// TSS用のセグメントはGDTの2要素分を消費する
     std::array<uint32_t, 26> g_tss;
 
     static_assert((kTSS >> 3) + 1 < g_gdt.size());
+
+    /// TSSを設定
+    void SetTSS(int index, uint64_t value) {
+        g_tss[index] = value & 0xffffffff;
+        g_tss[index + 1] = value >> 32;
+    }
+
+    uint64_t AllocateStackArea(int num_4kframes) {
+        auto [stk, err] = g_memory_manager->Allocate(num_4kframes);
+        if (err) {
+            Log(kError, "failed to allocate stack area: %s\n", err.Name());
+            exit(1);
+        }
+        return reinterpret_cast<uint64_t>(stk.Frame()) + num_4kframes * 4096;
+    }
 } // namespace
 
 void SetCodeSegment(SegmentDescriptor& desc,
@@ -87,16 +103,10 @@ void InitializeSegmentation() {
 }
 
 void InitializeTSS() {
-    const int kRSP0Frames = 8;
-    auto [stack0, err] = g_memory_manager->Allocate(kRSP0Frames);
-    if (err) {
-        Log(kError, "failed to allocate rsp0: %s\n", err.Name());
-        exit(1);
-    }
-
-    uint64_t rsp0 = reinterpret_cast<uint64_t>(stack0.Frame()) + kRSP0Frames * 4096;
-    g_tss[1] = rsp0 & 0xffffffff;
-    g_tss[2] = rsp0 >> 32;
+    // TSS.RSP0を設定
+    SetTSS(1, AllocateStackArea(8));
+    // TSS.IST1を設定
+    SetTSS(7 + 2 * kISTForTimer, AllocateStackArea(8));
 
     uint64_t tss_addr = reinterpret_cast<uint64_t>(&g_tss[0]);
     // GDT[5]にTSSの先頭アドレスを設定

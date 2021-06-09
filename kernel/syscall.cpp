@@ -9,6 +9,7 @@
 
 namespace syscall {
 
+/// システムコールはこのマクロを使って実装する
 #define SYSCALL(name)                                \
     int64_t name(                                    \
         uint64_t arg1, uint64_t arg2, uint64_t arg3, \
