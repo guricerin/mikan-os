@@ -1,5 +1,7 @@
-#include "../kernel/logger.hpp"
+#include <cstddef>
 #include <cstdint>
+
+#include "../kernel/logger.hpp"
 
 extern "C" {
 
@@ -8,7 +10,8 @@ struct SyscallResult {
     int error;
 };
 
-int64_t SyscallLogString(LogLevel, const char*);
-struct SyscallResult SyscallPutString(uint64_t, uint64_t, uint64_t);
+SyscallResult SyscallLogString(LogLevel level, const char* message);
+SyscallResult SyscallPutString(uint64_t, uint64_t, uint64_t);
 void SyscallExit(int exit_code);
+SyscallResult SyscallOpenWindow(int w, int h, int x, int y, const char* title);
 }

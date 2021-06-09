@@ -68,6 +68,24 @@ namespace syscall {
         __asm__("sti");
         return {task.OSStackPointer(), static_cast<int>(arg1)};
     }
+
+    /// ウィンドウを開く
+    SYSCALL(OpenWindow) {
+        const int w = arg1, h = arg2, x = arg3, y = arg4;
+        const auto title = reinterpret_cast<const char*>(arg5);
+        const auto win = std::make_shared<TopLevelWindow>(w, h, g_screen_config.pixel_format, title);
+
+        __asm__("cli");
+        const auto layer_id = g_layer_manager->NewLayer()
+                                  .SetWindow(win)
+                                  .SetDraggable(true)
+                                  .Move({x, y})
+                                  .ID();
+        g_active_layer->Activate(layer_id);
+        __asm__("sti");
+
+        return {layer_id, 0};
+    }
 #undef SYSCALL
 
 } // namespace syscall
@@ -76,10 +94,11 @@ using SyscallFuncType = syscall::Result(uint64_t, uint64_t, uint64_t, uint64_t, 
 
 /// システムコールの（関数ポインタ）テーブル
 /// この添字に0x80000000を足した値をシステムコール番号とする
-extern "C" std::array<SyscallFuncType*, 3> g_syscall_table{
+extern "C" std::array<SyscallFuncType*, 4> g_syscall_table{
     /* 0x00 */ syscall::LogString,
     /* 0x01 */ syscall::PutString,
     /* 0x02 */ syscall::Exit,
+    /* 0x03 */ syscall::OpenWindow,
 };
 
 void InitializeSyscall() {
