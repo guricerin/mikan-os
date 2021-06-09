@@ -1,9 +1,8 @@
-#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 
-#include "../../kernel/logger.hpp"
+#include "../syscall.h"
 
 int g_stack_ptr;
 long g_stack[100];
@@ -18,10 +17,6 @@ void Push(long value) {
     g_stack_ptr++;
     g_stack[g_stack_ptr] = value;
 }
-
-extern "C" int64_t SyscallLogString(LogLevel, const char*);
-
-extern "C" void SyscallExit(int exit_code);
 
 extern "C" void main(int argc, char** argv) {
     g_stack_ptr = -1;
