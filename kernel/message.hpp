@@ -22,6 +22,7 @@ struct Message {
         kLayer,
         kLayerFinish,
         kMouseMove,
+        kMouseButton,
     } type;
 
     /// メッセージ送信元のタスクID
@@ -59,5 +60,15 @@ struct Message {
             /// マウスのボタンの押下状況
             uint8_t buttons;
         } mouse_move;
+
+        /// マウスボタンクリックイベント
+        struct {
+            /// ウィンドウ左上が基準の座標
+            int x, y;
+            /// 1 : press, 0 : release
+            int press;
+            /// クリックされたボタンの種類（[0b00000000, 0b11111111]）
+            int button;
+        } mouse_button;
     } arg;
 };

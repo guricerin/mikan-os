@@ -37,7 +37,7 @@ namespace {
     };
 
     /// アクティブウィンドウにマウスイベントを送信
-    void SendMouseMessage(Vector2D<int> newpos, Vector2D<int> posdiff, uint8_t buttons) {
+    void SendMouseMessage(Vector2D<int> newpos, Vector2D<int> posdiff, uint8_t buttons, uint8_t previous_buttons) {
         const auto act = g_active_layer->GetActive();
         if (!act) {
             return;
@@ -49,9 +49,11 @@ namespace {
             return;
         }
 
+        // ウィンドウ左上を基準とした座標に変換
+        const auto relpos = newpos - layer->GetPosition();
+
+        // 座標が変化した場合
         if (posdiff.x != 0 && posdiff.y != 0) {
-            // ウィンドウ左上を基準とした座標に変換
-            const auto relpos = newpos - layer->GetPosition();
             Message msg{Message::kMouseMove};
             msg.arg.mouse_move.x = relpos.x;
             msg.arg.mouse_move.y = relpos.y;
@@ -59,6 +61,21 @@ namespace {
             msg.arg.mouse_move.dy = posdiff.y;
             msg.arg.mouse_move.buttons = buttons;
             g_task_manager->SendMessage(task_it->second, msg);
+        }
+
+        if (previous_buttons != buttons) {
+            // 差分のあるボタンの状態はビットが立っている
+            const auto diff = previous_buttons ^ buttons;
+            for (int i = 0; i < 8; i++) {
+                if ((diff >> i) & 1) {
+                    Message msg{Message::kMouseButton};
+                    msg.arg.mouse_button.x = relpos.x;
+                    msg.arg.mouse_button.y = relpos.y;
+                    msg.arg.mouse_button.press = (buttons >> i) & 1;
+                    msg.arg.mouse_button.button = i;
+                    g_task_manager->SendMessage(task_it->second, msg);
+                }
+            }
         }
     }
 } // namespace
@@ -95,7 +112,11 @@ void Mouse::OnInterrupt(uint8_t buttons, int8_t displacement_x, int8_t displacem
     if (!previous_left_pressed && left_pressed) { // 左クリック
         auto layer = g_layer_manager->FindLayerByPosition(position_, layer_id_);
         if (layer && layer->IsDraggable()) { // ウィンドウクリック
-            drag_layer_id_ = layer->ID();
+            const auto y_layer = position_.y - layer->GetPosition().y;
+            // タイトルバーをクリックしたとき（y座標が[0, TopLevelWindow::kTopLeftMargin.y)の範囲）にドラッグ状態にする
+            if (y_layer < TopLevelWindow::kTopLeftMargin.y) {
+                drag_layer_id_ = layer->ID();
+            }
             g_active_layer->Activate(layer->ID());
         } else {
             g_active_layer->Activate(0); // すべてのウィンドウを非アクティブ化
@@ -110,7 +131,7 @@ void Mouse::OnInterrupt(uint8_t buttons, int8_t displacement_x, int8_t displacem
 
     // ウィンドウをドラッグ中（ウィンドウ内でのマウス座標は変化していない）の場合はメッセージを送信しない
     if (drag_layer_id_ == 0) {
-        SendMouseMessage(new_pos, pos_diff, buttons);
+        SendMouseMessage(new_pos, pos_diff, buttons, previous_buttons_);
     }
 
     previous_buttons_ = buttons;
