@@ -1,7 +1,11 @@
 #include "mouse.hpp"
 
+#include <limits>
+#include <memory>
+
 #include "graphics.hpp"
 #include "layer.hpp"
+#include "task.hpp"
 #include "usb/classdriver/mouse.hpp"
 
 namespace {
@@ -31,6 +35,32 @@ namespace {
         "         @.@   ",
         "         @@@   ",
     };
+
+    /// アクティブウィンドウにマウスイベントを送信
+    void SendMouseMessage(Vector2D<int> newpos, Vector2D<int> posdiff, uint8_t buttons) {
+        const auto act = g_active_layer->GetActive();
+        if (!act) {
+            return;
+        }
+
+        const auto layer = g_layer_manager->FindLayer(act);
+        const auto task_it = g_layer_task_map->find(act);
+        if (task_it == g_layer_task_map->end()) {
+            return;
+        }
+
+        if (posdiff.x != 0 && posdiff.y != 0) {
+            // ウィンドウ左上を基準とした座標に変換
+            const auto relpos = newpos - layer->GetPosition();
+            Message msg{Message::kMouseMove};
+            msg.arg.mouse_move.x = relpos.x;
+            msg.arg.mouse_move.y = relpos.y;
+            msg.arg.mouse_move.dx = posdiff.x;
+            msg.arg.mouse_move.dy = posdiff.y;
+            msg.arg.mouse_move.buttons = buttons;
+            g_task_manager->SendMessage(task_it->second, msg);
+        }
+    }
 } // namespace
 
 void DrawMouseCursor(PixelWriter* pixel_writer, Vector2D<int> position) {
@@ -76,6 +106,11 @@ void Mouse::OnInterrupt(uint8_t buttons, int8_t displacement_x, int8_t displacem
         }
     } else if (previous_left_pressed && !left_pressed) { // 離した
         drag_layer_id_ = 0;
+    }
+
+    // ウィンドウをドラッグ中（ウィンドウ内でのマウス座標は変化していない）の場合はメッセージを送信しない
+    if (drag_layer_id_ == 0) {
+        SendMouseMessage(new_pos, pos_diff, buttons);
     }
 
     previous_buttons_ = buttons;
