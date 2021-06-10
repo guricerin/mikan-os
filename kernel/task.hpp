@@ -97,6 +97,7 @@ private:
     /// タスク一覧
     std::vector<std::unique_ptr<Task>> tasks_{};
     /// 最後に生成されたタスクのID
+    /// 1 : メインタスク（KernelMainStack()）
     uint64_t latest_id_{0};
     /// 優先度別のタスクの待機列（ランキュー）
     /// 先頭を現在実行中のタスクとする
@@ -113,5 +114,6 @@ private:
 };
 
 extern TaskManager* g_task_manager;
+constexpr uint64_t kMainTaskID = 1;
 
 void InitializeTask();

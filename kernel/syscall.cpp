@@ -293,6 +293,14 @@ namespace syscall {
                 app_events[i].arg.mouse_button.button = msg->arg.mouse_button.button;
                 i++;
                 break;
+            case Message::kTimerTimeout:
+                // アプリが生成したタイマーかを識別
+                if (msg->arg.timer.value < 0) {
+                    app_events[i].type = AppEvent::kTimerTimeout;
+                    app_events[i].arg.timer.timeout = msg->arg.timer.timeout;
+                    app_events[i].arg.timer.value = -msg->arg.timer.value;
+                    i++;
+                }
             default:
                 Log(kInfo, "uncaught event type: %u\n", msg->type);
                 break;
@@ -300,6 +308,33 @@ namespace syscall {
         }
 
         return {i, 0};
+    }
+
+    /// タイマ生成
+    SYSCALL(CreateTimer) {
+        const unsigned int mode = arg1;
+        const int timer_value = arg2;
+        if (timer_value <= 0) {
+            return {0, EINVAL};
+        }
+
+        __asm__("cli");
+        const uint64_t task_id = g_task_manager->CurrentTask().ID();
+        __asm__("sti");
+
+        unsigned long timeout = arg3 * kTimerFreq / 1000;
+        if (mode & 1) { // relative
+                        // 現在時刻を基準としてarg3 msec後にタイムアウト
+            timeout += g_timer_manager->CurrentTick();
+        }
+
+        __asm__("cli");
+        // 符号を反転しているのはOSとアプリのタイマを区別するため
+        // ターミナルタスクにはカーソル点滅タイマの通知が常に送られてくるので、アプリのタイマ値とだぶっても大丈夫なようにしている
+        g_timer_manager->AddTimer(Timer{timeout, -timer_value, task_id});
+        __asm__("sti");
+
+        return {timeout * 1000 / kTimerFreq, 0};
     }
 #undef SYSCALL
 
@@ -310,7 +345,7 @@ using SyscallFuncType = syscall::Result(uint64_t, uint64_t, uint64_t, uint64_t, 
 
 /// システムコールの（関数ポインタ）テーブル
 /// この添字に0x80000000を足した値をシステムコール番号とする
-extern "C" std::array<SyscallFuncType*, 11> g_syscall_table{
+extern "C" std::array<SyscallFuncType*, 0xc> g_syscall_table{
     /* 0x00 */ syscall::LogString,
     /* 0x01 */ syscall::PutString,
     /* 0x02 */ syscall::Exit,
@@ -322,6 +357,7 @@ extern "C" std::array<SyscallFuncType*, 11> g_syscall_table{
     /* 0x08 */ syscall::WinDrawLine,
     /* 0x09 */ syscall::CloseWindow,
     /* 0x0a */ syscall::ReadEvent,
+    /* 0x0b */ syscall::CreateTimer,
 };
 
 void InitializeSyscall() {

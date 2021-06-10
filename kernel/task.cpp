@@ -249,7 +249,7 @@ void InitializeTask() {
 
     // タスク切替え用のタイマ追加
     __asm__("cli");
-    g_timer_manager->AddTimer(Timer{g_timer_manager->CurrentTick() + kTaskTimerPeriod, kTaskTimerValue});
+    g_timer_manager->AddTimer(Timer{g_timer_manager->CurrentTick() + kTaskTimerPeriod, kTaskTimerValue, kMainTaskID});
     __asm__("sti");
 }
 

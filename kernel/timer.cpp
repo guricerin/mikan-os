@@ -53,12 +53,12 @@ void StopLAPICTimer() {
     g_initial_count = 0;
 }
 
-Timer::Timer(unsigned long timeout, int value) : timeout_{timeout}, value_{value} {
+Timer::Timer(unsigned long timeout, int value, uint64_t task_id) : timeout_{timeout}, value_{value}, task_id_{task_id} {
 }
 
 TimerManager::TimerManager() {
     // 番兵
-    timers_.push(Timer{std::numeric_limits<unsigned long>::max(), -1});
+    timers_.push(Timer{std::numeric_limits<unsigned long>::max(), 0, 0});
 }
 
 bool TimerManager::Tick() {
@@ -76,15 +76,15 @@ bool TimerManager::Tick() {
         if (t.Value() == kTaskTimerValue) {
             task_timer_timeout = true;
             timers_.pop();
-            timers_.push(Timer{tick_ + kTaskTimerPeriod, kTaskTimerValue});
+            timers_.push(Timer{tick_ + kTaskTimerPeriod, kTaskTimerValue, kMainTaskID});
             continue;
         }
 
         Message msg{Message::kTimerTimeout};
         msg.arg.timer.timeout = t.Timeout();
         msg.arg.timer.value = t.Value();
-        // タイマがタイムアウトしたことをメイン関数に通知
-        g_task_manager->SendMessage(1, msg);
+        // タイマに記録されているタスクへタイムアウトを通知
+        g_task_manager->SendMessage(t.TaskID(), msg);
 
         timers_.pop();
     }

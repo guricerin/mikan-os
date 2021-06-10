@@ -18,9 +18,10 @@ void StopLAPICTimer();
 /// Local APICタイマの1カウントを基準とした、論理的なタイマ
 class Timer {
 public:
-    Timer(unsigned long timeout, int value);
+    Timer(unsigned long timeout, int value, uint64_t task_id);
     unsigned long Timeout() const { return timeout_; }
     int Value() const { return value_; }
+    uint64_t TaskID() const { return task_id_; }
 
 private:
     /// タイムアウト時刻
@@ -28,6 +29,8 @@ private:
     unsigned long timeout_;
     /// タイムアウト時に送信する値
     int value_;
+    /// タイムアウトメッセージの通知先
+    uint64_t task_id_;
 };
 
 /// タイマー優先度を比較。タイムアウトが遠いほど優先度低
@@ -60,4 +63,5 @@ const int kTimerFreq = 100;
 /// 0.02secでタイムアウト
 const int kTaskTimerPeriod = static_cast<int>(kTimerFreq * 0.02);
 /// タスク切り替え用タイマの値（他のタイマとの識別用）
-const int kTaskTimerValue = std::numeric_limits<int>::min();
+/// 正の数値に修正（syscall.cpp::CreateTimer()を参照）
+const int kTaskTimerValue = std::numeric_limits<int>::max();

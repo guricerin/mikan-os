@@ -10,6 +10,7 @@ struct AppEvent {
         kQuit,
         kMouseMove,
         kMouseButton,
+        kTimerTimeout,
     } type;
 
     union {
@@ -30,6 +31,13 @@ struct AppEvent {
             /// クリックされたボタンの種類（[0b00000000, 0b11111111]）
             int button;
         } mouse_button;
+
+        struct {
+            /// タイムアウト時刻
+            unsigned long timeout;
+            /// タイマ値
+            int value;
+        } timer;
     } arg;
 };
 

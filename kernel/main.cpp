@@ -151,7 +151,7 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
     const int kTextboxCursorTimer = 1;
     const int kTimer05sec = static_cast<int>(kTimerFreq * 0.5);
     // 0,5secでタイムアウトするタイマ
-    g_timer_manager->AddTimer(Timer{kTimer05sec, kTextboxCursorTimer});
+    g_timer_manager->AddTimer(Timer{kTimer05sec, kTextboxCursorTimer, kMainTaskID});
     bool textbox_cursor_visible = false;
 
     // システムコール
@@ -208,7 +208,7 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
             // カーソル点滅タイマがタイムアウトした場合
             if (msg->arg.timer.value == kTextboxCursorTimer) {
                 __asm__("cli");
-                g_timer_manager->AddTimer(Timer{msg->arg.timer.timeout + kTimer05sec, kTextboxCursorTimer});
+                g_timer_manager->AddTimer(Timer{msg->arg.timer.timeout + kTimer05sec, kTextboxCursorTimer, kMainTaskID});
                 __asm__("sti");
                 textbox_cursor_visible = !textbox_cursor_visible;
                 DrawTextCursor(textbox_cursor_visible);
