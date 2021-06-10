@@ -492,6 +492,7 @@ Error Terminal::ExecuteFile(const fat::DirectoryEntry& file_entry, char* command
 
     char s[64];
     sprintf(s, "app exited. ret = %d\n", ret);
+    Print(s);
 
     // アプリ終了後、使用したメモリ領域を解放
     const auto addr_first = GetFirstLoadAddress(elf_header);

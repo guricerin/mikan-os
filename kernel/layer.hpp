@@ -53,6 +53,8 @@ public:
     /// 新しいレイヤーを生成して参照を返す
     /// そのレイヤーの実体はLayerManager内部のコンテナで保持される
     Layer& NewLayer();
+    /// 指定レイヤーを削除
+    void RemoveLayer(unsigned int id);
 
     /// 現在表示状態にあるレイヤーを描画
     void Draw(const Rectangle<int>& area) const;

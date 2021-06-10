@@ -205,6 +205,28 @@ namespace syscall {
             },
             arg1, arg2, arg3, arg4, arg5, arg6);
     }
+
+    /// 指定レイヤのウィンドウを削除
+    SYSCALL(CloseWindow) {
+        const unsigned int layer_id = arg1 & 0xffffffff;
+        const auto layer = g_layer_manager->FindLayer(layer_id);
+
+        if (layer == nullptr) {
+            return {EBADF, 0};
+        }
+
+        // 削除する前に再描画範囲を取得しておく
+        const auto layer_pos = layer->GetPosition();
+        const auto win_size = layer->GetWindow()->Size();
+
+        __asm__("cli");
+        g_active_layer->Activate(0);
+        g_layer_manager->RemoveLayer(layer_id);
+        g_layer_manager->Draw({layer_pos, win_size});
+        __asm__("sti");
+
+        return {0, 0};
+    }
 #undef SYSCALL
 
 } // namespace syscall
@@ -214,7 +236,7 @@ using SyscallFuncType = syscall::Result(uint64_t, uint64_t, uint64_t, uint64_t, 
 
 /// システムコールの（関数ポインタ）テーブル
 /// この添字に0x80000000を足した値をシステムコール番号とする
-extern "C" std::array<SyscallFuncType*, 9> g_syscall_table{
+extern "C" std::array<SyscallFuncType*, 10> g_syscall_table{
     /* 0x00 */ syscall::LogString,
     /* 0x01 */ syscall::PutString,
     /* 0x02 */ syscall::Exit,
@@ -224,6 +246,7 @@ extern "C" std::array<SyscallFuncType*, 9> g_syscall_table{
     /* 0x06 */ syscall::GetCurrentTick,
     /* 0x07 */ syscall::WinRedraw,
     /* 0x08 */ syscall::WinDrawLine,
+    /* 0x09 */ syscall::CloseWindow,
 };
 
 void InitializeSyscall() {
