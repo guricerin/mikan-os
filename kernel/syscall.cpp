@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cerrno>
+#include <cmath>
 #include <cstdint>
 
 #include "asmfunc.h"
@@ -151,16 +152,69 @@ namespace syscall {
             },
             arg1);
     }
+
+    /// 指定ウィンドウの指定の2点間に直線を引く
+    SYSCALL(WinDrawLine) {
+        return DoWinFunc(
+            [](Window& win, int x0, int y0, int x1, int y1, uint32_t color) {
+                auto sign = [](int x) {
+                    return (x > 0) ? 1 : (x < 0) ? -1
+                                                 : 0;
+                };
+                // 横、縦の変位
+                // + sign()の補正がないと(x1, y1)を含まないような直線になってしまう
+                const int dx = x1 - x0 + sign(x1 - x0);
+                const int dy = y1 - y0 + sign(y1 - y0);
+
+                // 2点が等しい場合
+                if (dx == 0 && dy == 0) {
+                    win.Writer()->Write({x0, y0}, ToColor(color));
+                    return Result{0, 0};
+                }
+
+                // 切り捨て
+                const auto floord = static_cast<double (*)(double)>(floor);
+                // 切り上げ
+                const auto ceild = static_cast<double (*)(double)>(ceil);
+
+                if (abs(dx) >= abs(dy)) { // 傾きが1以下（水平に近い）の場合、x軸に沿って点を描画
+                    if (dx < 0) {
+                        std::swap(x0, x1);
+                        std::swap(y0, y1);
+                    }
+                    const auto roundish = y1 >= y0 ? floord : ceild;
+                    // 傾き
+                    const double m = static_cast<double>(dy) / dx;
+                    for (int x = x0; x <= x1; x++) {
+                        const int y = roundish(m * (x - x0) + y0);
+                        win.Writer()->Write({x, y}, ToColor(color));
+                    }
+                } else { // 傾きが1より大きい（垂直に近い）の場合、y軸に沿って点を描画
+                    if (dy < 0) {
+                        std::swap(x0, x1);
+                        std::swap(y0, y1);
+                    }
+                    const auto roundish = x1 >= x0 ? floord : ceild;
+                    const double m = static_cast<double>(dx) / dy;
+                    for (int y = y0; y <= y1; y++) {
+                        const int x = roundish(m * (y - y0) + x0);
+                        win.Writer()->Write({x, y}, ToColor(color));
+                    }
+                }
+                return Result{0, 0};
+            },
+            arg1, arg2, arg3, arg4, arg5, arg6);
+    }
 #undef SYSCALL
 
 } // namespace syscall
 
-/// 引数は上限6つ
+/// 引数の上限は6つ
 using SyscallFuncType = syscall::Result(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t);
 
 /// システムコールの（関数ポインタ）テーブル
 /// この添字に0x80000000を足した値をシステムコール番号とする
-extern "C" std::array<SyscallFuncType*, 8> g_syscall_table{
+extern "C" std::array<SyscallFuncType*, 9> g_syscall_table{
     /* 0x00 */ syscall::LogString,
     /* 0x01 */ syscall::PutString,
     /* 0x02 */ syscall::Exit,
@@ -169,6 +223,7 @@ extern "C" std::array<SyscallFuncType*, 8> g_syscall_table{
     /* 0x05 */ syscall::WinFillRectangle,
     /* 0x06 */ syscall::GetCurrentTick,
     /* 0x07 */ syscall::WinRedraw,
+    /* 0x08 */ syscall::WinDrawLine,
 };
 
 void InitializeSyscall() {
