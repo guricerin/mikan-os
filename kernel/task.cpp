@@ -252,3 +252,8 @@ void InitializeTask() {
     g_timer_manager->AddTimer(Timer{g_timer_manager->CurrentTick() + kTaskTimerPeriod, kTaskTimerValue});
     __asm__("sti");
 }
+
+/// 現在実行中のタスクのOS用スタックポインタの値を取得
+__attribute__((no_caller_saved_registers)) extern "C" uint64_t GetCurrentTaskOSStackPointer() {
+    return g_task_manager->CurrentTask().OSStackPointer();
+}

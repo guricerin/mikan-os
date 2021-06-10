@@ -5,8 +5,10 @@
 #include <cmath>
 #include <cstdint>
 
+#include "app_event.hpp"
 #include "asmfunc.h"
 #include "font.hpp"
+#include "keyboard.hpp"
 #include "logger.hpp"
 #include "msr.hpp"
 #include "task.hpp"
@@ -85,6 +87,10 @@ namespace syscall {
                                   .Move({x, y})
                                   .ID();
         g_active_layer->Activate(layer_id);
+
+        // アプリのウィンドウに入力したキーがターミナルタスクに送信されるようにする
+        const auto task_id = g_task_manager->CurrentTask().ID();
+        g_layer_task_map->insert(std::make_pair(layer_id, task_id));
         __asm__("sti");
 
         return {layer_id, 0};
@@ -223,9 +229,58 @@ namespace syscall {
         g_active_layer->Activate(0);
         g_layer_manager->RemoveLayer(layer_id);
         g_layer_manager->Draw({layer_pos, win_size});
+        g_layer_task_map->erase(layer_id);
         __asm__("sti");
 
         return {0, 0};
+    }
+
+    /// イベント取得
+    /// アプリ側はイベントが来るまでOS側によって自動的にスリープ
+    SYSCALL(ReadEvent) {
+        // OS側のメモリ（仮想アドレス空間の前半部）が指定されていたらエラーにする
+        if (arg1 < 0x8000000000000000) {
+            return {0, EFAULT};
+        }
+        const auto app_events = reinterpret_cast<AppEvent*>(arg1);
+        const size_t len = arg2;
+
+        __asm__("cli");
+        // 実行中のタスク -> ターミナルタスク
+        auto& task = g_task_manager->CurrentTask();
+        __asm__("sti");
+        size_t i = 0;
+
+        while (i < len) {
+            __asm__("cli");
+            // アプリに対するキー入力はターミナルタスクのメッセージキューから受け取る
+            auto msg = task.ReceiveMessage();
+            if (!msg && i == 0) {
+                task.Sleep();
+                continue;
+            }
+            __asm__("sti");
+
+            if (!msg) {
+                break;
+            }
+
+            switch (msg->type) {
+            case Message::kKeyPush:
+                // Ctrl + Q で終了
+                if (msg->arg.keyboard.keycode == 20 /* Q key */
+                    && msg->arg.keyboard.modifier & (kLControlBitMask | kRControlBitMask)) {
+                    app_events[i].type = AppEvent::kQuit;
+                    i++;
+                }
+                break;
+            default:
+                Log(kInfo, "uncaught event type: %u\n", msg->type);
+                break;
+            }
+        }
+
+        return {i, 0};
     }
 #undef SYSCALL
 
@@ -236,7 +291,7 @@ using SyscallFuncType = syscall::Result(uint64_t, uint64_t, uint64_t, uint64_t, 
 
 /// システムコールの（関数ポインタ）テーブル
 /// この添字に0x80000000を足した値をシステムコール番号とする
-extern "C" std::array<SyscallFuncType*, 10> g_syscall_table{
+extern "C" std::array<SyscallFuncType*, 11> g_syscall_table{
     /* 0x00 */ syscall::LogString,
     /* 0x01 */ syscall::PutString,
     /* 0x02 */ syscall::Exit,
@@ -247,6 +302,7 @@ extern "C" std::array<SyscallFuncType*, 10> g_syscall_table{
     /* 0x07 */ syscall::WinRedraw,
     /* 0x08 */ syscall::WinDrawLine,
     /* 0x09 */ syscall::CloseWindow,
+    /* 0x0a */ syscall::ReadEvent,
 };
 
 void InitializeSyscall() {
