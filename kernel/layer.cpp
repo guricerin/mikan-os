@@ -254,6 +254,8 @@ void ActiveLayer::Activate(unsigned int layer_id) {
     if (active_layer_ > 0) {
         Layer* layer = manager_.FindLayer(active_layer_);
         layer->GetWindow()->Activate();
+        // 新規作成したレイヤの場合、初期状態で非表示（高さ: -1）なので、一旦最底面にもってくる
+        manager_.UpDown(active_layer_, 0);
         // マウスレイヤの1つ下
         manager_.UpDown(active_layer_, manager_.GetHeight(mouse_layer_) - 1);
         manager_.Draw(active_layer_);
