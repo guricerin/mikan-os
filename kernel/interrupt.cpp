@@ -112,8 +112,8 @@ void InitializeInterrupt() {
                 kKernelCS);
     /**
      * それぞれのエラー内容は
-     * https://www.intel.co.jp/content/dam/www/public/ijkk/jp/ja/documents/developer/IA32_Arh_Dev_Man_Vol2A_i.pdf
-     * の P.54 を参照
+     * https://www.intel.co.jp/content/www/jp/ja/architecture-and-technology/64-ia-32-architectures-software-developer-system-programming-manual-325384.html
+     * の P.188 を参照
      */
     // 除算エラー
     set_idt_entry(0, IntHandlerDE);
