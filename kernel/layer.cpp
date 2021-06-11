@@ -4,6 +4,7 @@
 
 #include "console.hpp"
 #include "logger.hpp"
+#include "task.hpp"
 
 namespace {
     template <class T, class U>
@@ -213,6 +214,18 @@ int LayerManager::GetHeight(unsigned int id) {
 namespace {
     /// 本物のフレームバッファー
     FrameBuffer* g_screen;
+
+    /// 指定レイヤが所属するタスクにアクティブ状態変更メッセージを送信
+    Error SendWindowActiveMessage(unsigned int layer_id, int activate) {
+        auto task_it = g_layer_task_map->find(layer_id);
+        if (task_it == g_layer_task_map->end()) {
+            return MAKE_ERROR(Error::kNoSuchTask);
+        }
+
+        Message msg{Message::kWindowActive};
+        msg.arg.window_active.activate = activate;
+        return g_task_manager->SendMessage(task_it->second, msg);
+    }
 } // namespace
 
 LayerManager* g_layer_manager;
@@ -233,6 +246,7 @@ void ActiveLayer::Activate(unsigned int layer_id) {
         Layer* layer = manager_.FindLayer(active_layer_);
         layer->GetWindow()->Deactivate();
         manager_.Draw(active_layer_);
+        SendWindowActiveMessage(active_layer_, 0);
     }
 
     // 指定レイヤを最前面に移動
@@ -243,6 +257,7 @@ void ActiveLayer::Activate(unsigned int layer_id) {
         // マウスレイヤの1つ下
         manager_.UpDown(active_layer_, manager_.GetHeight(mouse_layer_) - 1);
         manager_.Draw(active_layer_);
+        SendWindowActiveMessage(active_layer_, 1);
     }
 }
 

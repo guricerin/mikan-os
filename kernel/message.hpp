@@ -23,6 +23,7 @@ struct Message {
         kLayerFinish,
         kMouseMove,
         kMouseButton,
+        kWindowActive,
     } type;
 
     /// メッセージ送信元のタスクID
@@ -72,5 +73,11 @@ struct Message {
             /// クリックされたボタンの種類（[0b00000000, 0b11111111]）
             int button;
         } mouse_button;
+
+        /// ウィンドウアクティブ化イベント
+        struct {
+            /// 1: activate, 0: deactivate
+            int activate;
+        } window_active;
     } arg;
 };

@@ -9,6 +9,7 @@
 #include "memory_manager.hpp"
 #include "paging.hpp"
 #include "pci.hpp"
+#include "timer.hpp"
 
 namespace {
     /// 空白区切りのコマンドライン引数を配列（argbuf）に詰める
@@ -590,11 +591,18 @@ void TaskTerminal(uint64_t task_id, int64_t data) {
     Task& task = g_task_manager->CurrentTask();
     Terminal* terminal = new Terminal{task_id};
     g_layer_manager->Move(terminal->LayerID(), {100, 200});
-    g_active_layer->Activate(terminal->LayerID());
     g_layer_task_map->insert(std::make_pair(terminal->LayerID(), task_id));
+    g_active_layer->Activate(terminal->LayerID());
     // ターミナルのタスクが起動する時、自分自身を対応表に登録
     (*g_terminals)[task_id] = terminal;
     __asm__("sti");
+
+    auto add_blink_timer = [task_id](unsigned long t) {
+        g_timer_manager->AddTimer(Timer{t + static_cast<int>(kTimerFreq * 0.5), 1, task_id});
+    };
+    add_blink_timer(g_timer_manager->CurrentTick());
+
+    bool window_isactive = false;
 
     while (true) {
         __asm__("cli");
@@ -608,13 +616,16 @@ void TaskTerminal(uint64_t task_id, int64_t data) {
 
         switch (msg->type) {
         case Message::kTimerTimeout: {
-            // 一定時間ごとにカーゾルを点滅させる
-            const auto area = terminal->BlinkCursor();
-            Message msg = MakeLayerMessage(task_id, terminal->LayerID(), LayerOperation::DrawArea, area);
-            // メインタスクに描画処理を要求
-            __asm__("cli");
-            g_task_manager->SendMessage(kMainTaskID, msg);
-            __asm__("sti");
+            add_blink_timer(msg->arg.timer.timeout);
+            if (window_isactive) {
+                // 一定時間ごとにカーゾルを点滅させる
+                const auto area = terminal->BlinkCursor();
+                Message msg = MakeLayerMessage(task_id, terminal->LayerID(), LayerOperation::DrawArea, area);
+                // メインタスクに描画処理を要求
+                __asm__("cli");
+                g_task_manager->SendMessage(kMainTaskID, msg);
+                __asm__("sti");
+            }
         } break;
         case Message::kKeyPush:
             // キーの二重入力を防ぐ
@@ -628,6 +639,9 @@ void TaskTerminal(uint64_t task_id, int64_t data) {
                 g_task_manager->SendMessage(kMainTaskID, msg);
                 __asm__("sti");
             }
+            break;
+        case Message::kWindowActive:
+            window_isactive = msg->arg.window_active.activate;
             break;
         default:
             break;

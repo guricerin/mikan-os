@@ -162,10 +162,9 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
     // このタスク（KernelMainStack()）
     Task& main_task = g_task_manager->CurrentTask();
     g_terminals = new std::map<uint64_t, Terminal*>;
-    const uint64_t task_terminal_id = g_task_manager->NewTask()
-                                          .InitContext(TaskTerminal, 0)
-                                          .Wakeup()
-                                          .ID();
+    g_task_manager->NewTask()
+        .InitContext(TaskTerminal, 0)
+        .Wakeup();
 
     // USBデバイス
     // xHCIは初期化するとすぐに割り込みが発生するので、タスク機能を初期化してからにする
@@ -175,7 +174,7 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
 
     char str[128];
     // 割り込みイベントループ
-    while (1) {
+    while (true) {
         // clear interrupt : 割り込みを無効化
         // データ競合の回避のため（キューの操作中に割り込みさせない）
         __asm__("cli");
@@ -213,10 +212,6 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
                 textbox_cursor_visible = !textbox_cursor_visible;
                 DrawTextCursor(textbox_cursor_visible);
                 g_layer_manager->Draw(g_text_window_layer_id);
-
-                __asm__("cli");
-                g_task_manager->SendMessage(task_terminal_id, *msg);
-                __asm__("sti");
             }
             break;
         case Message::kKeyPush:
@@ -248,7 +243,7 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
             break;
         case Message::kLayer:
             // 描画中の割り込みは許可しておく
-            // 描画処理は低優先度な割にリソースを食うため、割り込みを禁止すると取りこぼしが発生するから
+            // 描画処理は低優先度な割にリソースを食うため、割り込みを禁止すると取りこぼしてしまうから
             ProcessLayerMessage(*msg);
             __asm__("cli");
             // 送信元タスクに描画終了を通知
