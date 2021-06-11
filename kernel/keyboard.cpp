@@ -43,7 +43,7 @@ namespace {
 
 void InitializeKeyboard() {
     // 割り込みイベント登録
-    usb::HIDKeyboardDriver::default_observer = [](uint8_t modifier, uint8_t keycode) {
+    usb::HIDKeyboardDriver::default_observer = [](uint8_t modifier, uint8_t keycode, bool press) {
         const bool shift = (modifier & (kLShiftBitMask | kRShiftBitMask)) != 0;
         char ascii = kKeyboardMap[keycode];
         if (shift) {
@@ -53,7 +53,8 @@ void InitializeKeyboard() {
         msg.arg.keyboard.modifier = modifier;
         msg.arg.keyboard.keycode = keycode;
         msg.arg.keyboard.ascii = ascii;
+        msg.arg.keyboard.press = press;
         // メインタスクに割り込みを通知
-        g_task_manager->SendMessage(1, msg);
+        g_task_manager->SendMessage(kMainTaskID, msg);
     };
 }

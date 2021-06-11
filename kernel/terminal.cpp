@@ -529,7 +529,7 @@ void Terminal::Print(const char* s, std::optional<size_t> len) {
     // 画面を再描画
     Message msg = MakeLayerMessage(task_id_, LayerID(), LayerOperation::DrawArea, draw_area);
     __asm__("cli");
-    g_task_manager->SendMessage(1, msg);
+    g_task_manager->SendMessage(kMainTaskID, msg);
     __asm__("sti");
 }
 
@@ -613,19 +613,22 @@ void TaskTerminal(uint64_t task_id, int64_t data) {
             Message msg = MakeLayerMessage(task_id, terminal->LayerID(), LayerOperation::DrawArea, area);
             // メインタスクに描画処理を要求
             __asm__("cli");
-            g_task_manager->SendMessage(1, msg);
+            g_task_manager->SendMessage(kMainTaskID, msg);
             __asm__("sti");
         } break;
-        case Message::kKeyPush: {
-            const auto area = terminal->InputKey(msg->arg.keyboard.modifier,
-                                                 msg->arg.keyboard.keycode,
-                                                 msg->arg.keyboard.ascii);
-            Message msg = MakeLayerMessage(task_id, terminal->LayerID(), LayerOperation::DrawArea, area);
-            // メインタスクに描画処理を要求
-            __asm__("cli");
-            g_task_manager->SendMessage(1, msg);
-            __asm__("sti");
-        } break;
+        case Message::kKeyPush:
+            // キーの二重入力を防ぐ
+            if (msg->arg.keyboard.press) {
+                const auto area = terminal->InputKey(msg->arg.keyboard.modifier,
+                                                     msg->arg.keyboard.keycode,
+                                                     msg->arg.keyboard.ascii);
+                Message msg = MakeLayerMessage(task_id, terminal->LayerID(), LayerOperation::DrawArea, area);
+                // メインタスクに描画処理を要求
+                __asm__("cli");
+                g_task_manager->SendMessage(kMainTaskID, msg);
+                __asm__("sti");
+            }
+            break;
         default:
             break;
         }

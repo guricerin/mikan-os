@@ -40,6 +40,8 @@ struct Message {
             uint8_t modifier;
             uint8_t keycode;
             char ascii;
+            /// 1 : press, 0 : release
+            int press;
         } keyboard;
 
         /// 描画イベント

@@ -271,8 +271,14 @@ namespace syscall {
                 if (msg->arg.keyboard.keycode == 20 /* Q key */
                     && msg->arg.keyboard.modifier & (kLControlBitMask | kRControlBitMask)) {
                     app_events[i].type = AppEvent::kQuit;
-                    i++;
+                } else {
+                    app_events[i].type = AppEvent::kKeyPush;
+                    app_events[i].arg.keypush.modifier = msg->arg.keyboard.modifier;
+                    app_events[i].arg.keypush.keycode = msg->arg.keyboard.keycode;
+                    app_events[i].arg.keypush.ascii = msg->arg.keyboard.ascii;
+                    app_events[i].arg.keypush.press = msg->arg.keyboard.press;
                 }
+                i++;
                 break;
             case Message::kMouseMove:
                 // 型変換
@@ -301,6 +307,7 @@ namespace syscall {
                     app_events[i].arg.timer.value = -msg->arg.timer.value;
                     i++;
                 }
+                break;
             default:
                 Log(kInfo, "uncaught event type: %u\n", msg->type);
                 break;

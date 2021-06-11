@@ -30,7 +30,7 @@ namespace {
     /// xHCI用割り込みハンドラ
     __attribute__((interrupt)) void IntHandlerXHCI(InterruptFrame* frame) {
         // メインタスクに通知
-        g_task_manager->SendMessage(1, Message{Message::kInterruptXHCI});
+        g_task_manager->SendMessage(kMainTaskID, Message{Message::kInterruptXHCI});
         NotifyEndOfInterrupt();
     }
 

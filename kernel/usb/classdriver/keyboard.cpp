@@ -3,6 +3,7 @@
 #include "usb/device.hpp"
 #include "usb/memory.hpp"
 #include <algorithm>
+#include <bitset>
 
 namespace usb {
     HIDKeyboardDriver::HIDKeyboardDriver(Device* dev, int interface_index)
@@ -14,21 +15,21 @@ namespace usb {
         // ブートインターフェース :
         /// HID機器に内蔵されたレポートディスクリプタを解釈するのではなく、
         /// UEFI BIOSなどあまり高度なことをしたくないソフトでマウスやキーボードなど最低限の機器を制御したい場合のインターフェース
+        std::bitset<256> prev, current;
         for (int i = 2; i < 8; ++i) {
-            const uint8_t key = Buffer()[i];
-            if (key == 0) {
-                continue;
-            }
-            const auto& prev_buf = PreviousBuffer();
-            // +2 は、キーコードが配置されるのが [Buffer()[2], Buffer()[7]]のため
-            if (std::find(prev_buf.begin() + 2, prev_buf.end(), key) != prev_buf.end()) {
-                continue;
-            }
+            prev.set(PreviousBuffer()[i], true);
+            current.set(Buffer()[i], true);
+        }
 
-            // ブートインターフェースの場合、モディファイアキーのバイト位置は0固定
-            // ちなみにBuffer()[1]は予約領域
-            const uint8_t modifier = Buffer()[0];
-            NotifyKeyPush(modifier, key);
+        const auto changed = prev ^ current;
+        const auto pressed = changed & current;
+        for (int key = 1; key < 256; key++) {
+            if (changed.test(key)) {
+                // ブートインターフェースの場合、モディファイアキーのバイト位置は0固定
+                // ちなみにBuffer()[1]は予約領域
+                const uint8_t modifier = Buffer()[0];
+                NotifyKeyPush(modifier, key, pressed.test(key));
+            }
         }
         return MAKE_ERROR(Error::kSuccess);
     }
@@ -48,9 +49,9 @@ namespace usb {
 
     std::function<HIDKeyboardDriver::ObserverType> HIDKeyboardDriver::default_observer;
 
-    void HIDKeyboardDriver::NotifyKeyPush(uint8_t modifier, uint8_t keycode) {
+    void HIDKeyboardDriver::NotifyKeyPush(uint8_t modifier, uint8_t keycode, bool press) {
         for (int i = 0; i < num_observers_; ++i) {
-            observers_[i](modifier, keycode);
+            observers_[i](modifier, keycode, press);
         }
     }
 } // namespace usb

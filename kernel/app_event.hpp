@@ -11,6 +11,7 @@ struct AppEvent {
         kMouseMove,
         kMouseButton,
         kTimerTimeout,
+        kKeyPush,
     } type;
 
     union {
@@ -38,6 +39,14 @@ struct AppEvent {
             /// タイマ値
             int value;
         } timer;
+
+        struct {
+            uint8_t modifier;
+            uint8_t keycode;
+            char ascii;
+            /// 1 : press, 0 : release
+            int press;
+        } keypush;
     } arg;
 };
 

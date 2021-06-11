@@ -221,7 +221,10 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
             break;
         case Message::kKeyPush:
             if (auto act = g_active_layer->GetActive(); act == g_text_window_layer_id) {
-                InputTextWindow(msg->arg.keyboard.ascii);
+                // キーの二重入力を防ぐ
+                if (msg->arg.keyboard.press) {
+                    InputTextWindow(msg->arg.keyboard.ascii);
+                }
             } else {
                 // アクティブなレイヤIDからタスクを検索し、そのタスクにメッセージを通知
                 __asm__("cli");
