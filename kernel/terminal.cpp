@@ -234,7 +234,7 @@ namespace {
         return MAKE_ERROR(Error::kSuccess);
     }
 
-    /// アプリ用のページング構造を破棄
+    /// アプリ用のページング構造を破棄（PML4より下層のページング構造を削除）
     Error CleanPageMaps(LinearAddress4Level addr) {
         auto pml4_table = reinterpret_cast<PageMapEntry*>(GetCR3());
         auto pdp_table = pml4_table[addr.parts.pml4].Pointer();
@@ -246,6 +246,33 @@ namespace {
         const auto pdp_addr = reinterpret_cast<uintptr_t>(pdp_table);
         const FrameID pdp_frame{pdp_addr / kBytesPerFrame};
         return g_memory_manager->Free(pdp_frame, 1);
+    }
+
+    /// 新規の階層ページング構造を生成して有効化
+    WithError<PageMapEntry*> SetupPML4(Task& current_task) {
+        auto pml4 = NewPageMap();
+        if (pml4.error) {
+            return pml4;
+        }
+
+        const auto current_pml4 = reinterpret_cast<PageMapEntry*>(GetCR3());
+        // OSカーネル用のメモリマッピングだけは共通なので、それに該当する前半部分をコピー
+        memcpy(pml4.value, current_pml4, 256 * sizeof(uint64_t));
+
+        const auto cr3 = reinterpret_cast<uint64_t>(pml4.value);
+        SetCR3(cr3);
+        current_task.Context().cr3 = cr3;
+        return pml4;
+    }
+
+    /// 階層ページング構造の削除
+    Error FreePML4(Task& current_task) {
+        const auto cr3 = current_task.Context().cr3;
+        current_task.Context().cr3 = 0;
+        ResetCR3();
+
+        const FrameID frame{cr3 / kBytesPerFrame};
+        return g_memory_manager->Free(frame, 1);
     }
 } // namespace
 
@@ -451,6 +478,16 @@ Error Terminal::ExecuteFile(const fat::DirectoryEntry& file_entry, char* command
     }
 
     // elf形式の場合
+
+    // アプリ独自の仮想アドレスに実行可能ファイルをロードするため、事前にタスク固有の階層ページング構造を設定
+    __asm__("cli");
+    auto& task = g_task_manager->CurrentTask();
+    __asm__("sti");
+    if (auto pml4 = SetupPML4(task); pml4.error) {
+        return pml4.error;
+    }
+
+    // 実行可能ファイルをロード
     if (auto err = LoadElf(elf_header)) {
         return err;
     }
@@ -478,10 +515,6 @@ Error Terminal::ExecuteFile(const fat::DirectoryEntry& file_entry, char* command
         return err;
     }
 
-    __asm__("cli");
-    auto& task = g_task_manager->CurrentTask();
-    __asm__("sti");
-
     // エントリポイントのアドレスを取得し、実行
     auto entry_addr = elf_header->e_entry;
     int ret = CallApp(argc.value,
@@ -501,7 +534,7 @@ Error Terminal::ExecuteFile(const fat::DirectoryEntry& file_entry, char* command
         return err;
     }
 
-    return MAKE_ERROR(Error::kSuccess);
+    return FreePML4(task);
 }
 
 void Terminal::Print(const char* s, std::optional<size_t> len) {

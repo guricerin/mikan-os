@@ -20,6 +20,9 @@ void SetupIdentityPageTable();
 
 void InitializePaging();
 
+/// CR3がOSカーネル用のPML4を指すように設定
+void ResetCR3();
+
 union LinearAddress4Level {
     uint64_t value;
 
@@ -71,7 +74,7 @@ union LinearAddress4Level {
 };
 
 /// ページング構造のエントリ
-/// これが各階層ごとに512個並んでいる
+/// これが各階層毎に512個並んでいる
 /// 63:52 : 全部0
 /// 51:12 : 1つ下位の階層を指す物理アドレス
 /// 11:0  : フラグ（Readable, Writable, Executable）
