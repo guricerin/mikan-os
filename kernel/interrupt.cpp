@@ -110,6 +110,12 @@ void InitializeInterrupt() {
                             kISTForTimer), // IST
                 reinterpret_cast<uint64_t>(IntHandlerLAPICTimer),
                 kKernelCS);
+    /**
+     * それぞれのエラー内容は
+     * https://www.intel.co.jp/content/dam/www/public/ijkk/jp/ja/documents/developer/IA32_Arh_Dev_Man_Vol2A_i.pdf
+     * の P.54 を参照
+     */
+    // 除算エラー
     set_idt_entry(0, IntHandlerDE);
     set_idt_entry(1, IntHandlerDB);
     set_idt_entry(3, IntHandlerBP);
