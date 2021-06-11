@@ -225,6 +225,11 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
                 if (msg->arg.keyboard.press) {
                     InputTextWindow(msg->arg.keyboard.ascii);
                 }
+            } else if (msg->arg.keyboard.press &&
+                       msg->arg.keyboard.keycode == 59 /* F2 */) {
+                g_task_manager->NewTask()
+                    .InitContext(TaskTerminal, 0)
+                    .Wakeup();
             } else {
                 // アクティブなレイヤIDからタスクを検索し、そのタスクにメッセージを通知
                 __asm__("cli");

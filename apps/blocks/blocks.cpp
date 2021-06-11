@@ -112,9 +112,6 @@ extern "C" void main(int argc, char** arv) {
             } else if (events[0].type == AppEvent::kQuit) {
                 goto fin;
             } else if (events[0].type == AppEvent::kKeyPush) {
-                char s[128];
-                sprintf(s, "keypush: %d\n", events[0].arg.keypush.keycode);
-                SyscallLogString(kInfo, s);
                 if (!events[0].arg.keypush.press) { // release
                     move_dir = 0;
                 } else {
