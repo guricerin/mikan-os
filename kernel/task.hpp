@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "error.hpp"
+#include "fat.hpp"
 #include "message.hpp"
 
 /// コンテキスト : タスクの実行バイナリ、コマンドライン引数、環境変数、スタックメモリ、各レジスタの値など
@@ -45,6 +46,8 @@ public:
     void SendMessage(const Message& msg);
     /// メッセージを取得
     std::optional<Message> ReceiveMessage();
+    std::vector<std::unique_ptr<fat::FileDescriptor>>& Files();
+
     int Level() const { return level_; }
     bool Running() const { return running_; }
 
@@ -60,6 +63,9 @@ private:
     unsigned int level_{kDefaultLevel};
     /// 実行可能状態（待機列に並んでいる） : true
     bool running_{false};
+    /// ファイルディスクリプタをタスク毎に持たせる
+    /// -> 番号が他のタスクとだぶっても大丈夫
+    std::vector<std::unique_ptr<fat::FileDescriptor>> files_{};
 
     Task& SetLevel(int level) {
         level_ = level;

@@ -78,6 +78,10 @@ std::optional<Message> Task::ReceiveMessage() {
     return msg;
 }
 
+std::vector<std::unique_ptr<fat::FileDescriptor>>& Task::Files() {
+    return files_;
+}
+
 TaskManager::TaskManager() {
     // 最初に突っ込んでおくのは優先度最高のメインタスク
     // idは常に1

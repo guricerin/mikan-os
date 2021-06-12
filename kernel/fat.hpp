@@ -128,4 +128,21 @@ namespace fat {
     /// entry : ファイルを表すディレクトリエントリ
     /// ret : 読み込んだバイト数
     size_t LoadFile(void* buf, size_t len, const DirectoryEntry& entry);
+
+    /// 各タスクがアクセスするファイルをOSカーネルが識別するための識別子、整数
+    class FileDescriptor {
+    public:
+        explicit FileDescriptor(DirectoryEntry& fat_entry);
+        size_t Read(void* buf, size_t len);
+
+    private:
+        /// ファイルへの参照
+        DirectoryEntry& fat_entry_;
+        /// アイル先頭からの読み込みオフセット（byte単位）
+        size_t rd_off_ = 0;
+        /// rd_off_が指す位置に対応するクラスタ番号
+        unsigned long rd_cluster_ = 0;
+        /// クラスタ先頭からのオフセット（byte単位）
+        size_t rd_cluster_off_ = 0;
+    };
 } // namespace fat
