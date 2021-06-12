@@ -101,15 +101,23 @@ namespace fat {
     /// ext : 拡張子（4byte以上の配列）
     void ReadName(const DirectoryEntry& entry, char* base, char* ext);
 
+    /// ディレクトリエントリの短名をdestにコピー
+    /// 短名の拡張子が空なら "<base>"を、空でなければ"<base>.<ext>"をコピー
+    void FormatName(const DirectoryEntry& entry, char* dest);
+
     static const unsigned long kEndOfClusterchain = 0x0ffffffflu;
 
     /// 指定クラスタの次のクラスタ番号を返す
     unsigned long NextCluster(unsigned long cluster);
 
     /// 指定ディレクトリからファイルを探す
-    /// name : 8+3形式のファイル名（大文字小文字は区別しない）
+    /// path : 8+3形式のファイル名（大文字小文字は区別しない）
     /// directory_cluster : ディレクトリの開始クラスタ（省略するとルートから検索）
-    DirectoryEntry* FindFile(const char* name, unsigned long directory_cluster = 0);
+    /// return : ファイルorディレクトリを表すエントリ、末尾スラッシュを示すフラグ
+    ///     エントリが見つからなければnullptr
+    ///     エントリの直後にスラッシュがあればtrue
+    ///     パスの途中のエントリがファイルであれば探索を諦め、そのエントリとtrueを返す
+    std::pair<DirectoryEntry*, bool> FindFile(const char* path, unsigned long directory_cluster = 0);
 
     /// 指定のファイル名と一致 : true
     bool NameIsEqual(const DirectoryEntry& entry, const char* name);

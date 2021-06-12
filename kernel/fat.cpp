@@ -2,6 +2,25 @@
 
 #include <cctype>
 #include <cstring>
+#include <utility>
+
+namespace {
+    /// 指定パスを '/' で区切った最初の要素をpath_elemにコピー
+    /// 指定パスの次の要素を返す
+    /// 最初の要素の末尾に '/' があるかを返す
+    std::pair<const char*, bool> NextPathElement(const char* path, char* path_elem) {
+        const char* next_slash = strchr(path, '/');
+        if (next_slash == nullptr) {
+            strcpy(path_elem, path);
+            return {nullptr, false};
+        }
+
+        const auto elem_len = next_slash - path;
+        strncpy(path_elem, path, elem_len);
+        path_elem[elem_len] = '\0';
+        return {&next_slash[1], true};
+    }
+} // namespace
 
 namespace fat {
     BPB* g_boot_volume_image;
@@ -34,6 +53,14 @@ namespace fat {
         }
     }
 
+    void FormatName(const DirectoryEntry& entry, char* dest) {
+        char ext[5] = ".";
+        ReadName(entry, dest, &ext[1]);
+        if (ext[1]) {
+            strcat(dest, ext);
+        }
+    }
+
     unsigned long NextCluster(unsigned long cluster) {
         uintptr_t fat_offset = g_boot_volume_image->reserved_sector_count * g_boot_volume_image->bytes_per_sector;
         uint32_t* fat = reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(g_boot_volume_image) + fat_offset);
@@ -44,16 +71,39 @@ namespace fat {
         return next;
     }
 
-    DirectoryEntry* FindFile(const char* name, unsigned long directory_cluster) {
-        if (directory_cluster == 0) {
+    std::pair<DirectoryEntry*, bool> FindFile(const char* path, unsigned long directory_cluster) {
+        if (path[0] == '/') { // 絶対パス
+            directory_cluster = g_boot_volume_image->root_cluster;
+            path++;
+        } else if (directory_cluster == 0) {
             directory_cluster = g_boot_volume_image->root_cluster;
         }
 
+        // ex.
+        // 1回目: path = "efi/boot" -> path_elem = "efi", path_last = false
+        // 2回目: path = "boot" -> path_elem = "boot", path_last = true
+        char path_elem[13];
+        const auto [next_path, post_slash] = NextPathElement(path, path_elem);
+        // path_elemにコピーされた文字列がパスの末尾かどうか
+        const bool path_last = next_path == nullptr || next_path[0] == '\0';
+
         while (directory_cluster != kEndOfClusterchain) {
             auto dir = GetSectorByCluster<DirectoryEntry>(directory_cluster);
+            // path_elemと一致する名前のエントリを探索
             for (int i = 0; i < g_bytes_per_cluster / sizeof(DirectoryEntry); i++) {
-                if (NameIsEqual(dir[i], name)) {
-                    return &dir[i];
+                if (dir[i].name[0] == 0x00) {
+                    goto not_found;
+                } else if (!NameIsEqual(dir[i], path_elem)) {
+                    continue;
+                }
+
+                // path_elemと一致するエントリをみつけた
+
+                if (dir[i].attr == Attribute::kDirectory && !path_last) { // 1段潜る
+                    return FindFile(next_path, dir[i].FirstCluster());
+                } else {
+                    // dir[i]がディレクトリではないか、パスの末尾に来たので探索をやめる
+                    return {&dir[i], post_slash};
                 }
             }
 
@@ -61,7 +111,8 @@ namespace fat {
             directory_cluster = NextCluster(directory_cluster);
         }
 
-        return nullptr;
+    not_found:
+        return {nullptr, post_slash};
     }
 
     bool NameIsEqual(const DirectoryEntry& entry, const char* name) {
