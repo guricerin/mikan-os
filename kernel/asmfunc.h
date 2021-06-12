@@ -33,4 +33,8 @@ void LoadTR(uint16_t sel);
 void WriteMSR(uint32_t msr, uint64_t value);
 /// syscallでコールされるOS側の関数
 void SyscallEntry(void);
+/// アプリを強制終了させる
+/// rsp : OS用スタックポインタ
+/// ret_val : CallApp()の戻り値となる値
+void ExitApp(uint64_t rsp, int32_t ret_val);
 }

@@ -1,14 +1,8 @@
 {
-    "workbench.editorAssociations": [
-        {
-            "viewType": "hexEditor.hexedit",
-            "filenamePattern": "*.efi"
-        },
-        {
-            "viewType": "hexEditor.hexedit",
-            "filenamePattern": "*.EFI"
-        }
-    ],
+    "workbench.editorAssociations": {
+        "*.efi": "hexEditor.hexedit",
+        "*.EFI": "hexEditor.hexedit"
+    },
     "files.exclude": {
         "**/*.o": true,
         "**/*.d": true,

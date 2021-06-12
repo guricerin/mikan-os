@@ -485,13 +485,11 @@ Error Terminal::ExecuteFile(const fat::DirectoryEntry& file_entry, char* command
 
     auto elf_header = reinterpret_cast<Elf64_Ehdr*>(&file_buf[0]);
     // フラットバイナリ（ファイルの先頭に実行可能な機械語が配置されている）の場合
+    // CPL=0（実行権限がOSカーネルモードのまま）なので、もう実行しない
     if (memcmp(elf_header->e_ident, "\x7f"
                                     "ELF",
                4) != 0) {
-        using Func = void();
-        auto f = reinterpret_cast<Func*>(&file_buf[0]);
-        f();
-        return MAKE_ERROR(Error::kSuccess);
+        return MAKE_ERROR(Error::kInvalidFile);
     }
 
     // elf形式の場合

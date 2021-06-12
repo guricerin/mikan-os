@@ -1,5 +1,7 @@
 #include "interrupt.hpp"
 
+#include <csignal>
+
 #include "asmfunc.h"
 #include "font.hpp"
 #include "graphics.hpp"
@@ -58,17 +60,33 @@ namespace {
         PrintHex(frame->rsp, 16, {500 + 8 * 12, 16 * 3});
     }
 
+    /// 現在実行中のアプリを強制終了する
+    void KillApp(InterruptFrame* frame) {
+        // スタックフレームに記録したされているCS -> 例外の原因となったプログラムを実行していたときのCS
+        const auto cpl = frame->cs & 0x3;
+        // アプリが原因の例外ではない
+        if (cpl != 3) {
+            return;
+        }
+
+        auto& task = g_task_manager->CurrentTask();
+        __asm__("sti");
+        ExitApp(task.OSStackPointer(), 128 + SIGSEGV);
+    }
+
 /// CPU例外に対応する割り込みハンドラ群
 #define FaultHandlerWithError(fault_name)                                                                \
     __attribute__((interrupt)) void IntHandler##fault_name(InterruptFrame* frame, uint64_t error_code) { \
+        KillApp(frame);                                                                                  \
         PrintFrame(frame, "#" #fault_name);                                                              \
         WriteString(*g_screen_writer, {500, 16 * 4}, "ERR", {0, 0, 0});                                  \
         PrintHex(error_code, 16, {500 + 8 * 4, 16 * 4});                                                 \
         while (true) __asm__("hlt");                                                                     \
-    }
+    } // namespace
 
 #define FaultHandlerNoError(fault_name)                                             \
     __attribute__((interrupt)) void IntHandler##fault_name(InterruptFrame* frame) { \
+        KillApp(frame);                                                             \
         PrintFrame(frame, "#" #fault_name);                                         \
         while (true) __asm__("hlt");                                                \
     }

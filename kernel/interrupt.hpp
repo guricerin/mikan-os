@@ -45,6 +45,7 @@ public:
     };
 };
 
+/// 割り込みフレーム
 struct InterruptFrame {
     uint64_t rip;
     uint64_t cs;
