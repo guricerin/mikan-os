@@ -55,17 +55,16 @@ private:
     Rectangle<int> HistoryUpDown(int direction);
 };
 
-/// タスクIDとターミナルの対応表
-extern std::map<uint64_t, Terminal*>* g_terminals;
-
 void TaskTerminal(uint64_t task_id, int64_t data);
 
-/// キーボードをファイルに見せかける（標準入力）
+/// キーボードをファイルに見せかける
 class TerminalFileDescriptor : public IFileDescriptor {
 public:
     explicit TerminalFileDescriptor(Task& task, Terminal& term);
-    /// キーボード入力から1文字だけ読み取る
+    /// キーボード入力から1文字だけ読み取る（標準入力）
     size_t Read(void* buf, size_t len) override;
+    /// ターミナルに出力する（標準出力）
+    size_t Write(const void* buf, size_t len) override;
 
 private:
     Task& task_;

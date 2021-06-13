@@ -268,6 +268,22 @@ namespace fat {
         return {dir, MAKE_ERROR(Error::kSuccess)};
     }
 
+    unsigned long AllocateClusterChain(size_t n) {
+        uint32_t* fat = GetFAT();
+        unsigned long first_cluster;
+        for (first_cluster = 2;; first_cluster++) {
+            if (fat[first_cluster] == 0) { // 未使用クラスタを発見
+                fat[first_cluster] = kEndOfClusterchain;
+                break;
+            }
+        }
+
+        if (n > 1) {
+            ExtendCluster(first_cluster, n - 1);
+        }
+        return first_cluster;
+    }
+
     FileDescriptor::FileDescriptor(DirectoryEntry& fat_entry) : fat_entry_{fat_entry} {
     }
 
@@ -296,6 +312,51 @@ namespace fat {
 
         // rd_off_はメソッド呼び出し前よりlenバイトだけ進む
         rd_off_ += total;
+        return total;
+    }
+
+    size_t FileDescriptor::Write(const void* buf, size_t len) {
+        // 指定バイト数を書き込むのに必要なクラスタ数を算出
+        auto num_cluster = [](size_t bytes) {
+            // 切り上げ
+            return (bytes + g_bytes_per_cluster - 1) / g_bytes_per_cluster;
+        };
+
+        if (wr_cluster_ == 0) {                   // （該当タスクが）初めてファイル書き込みを行う場合
+            if (fat_entry_.FirstCluster() != 0) { // 既存のファイル
+                wr_cluster_ = fat_entry_.FirstCluster();
+            } else { // 新規作成されたばかりの空ファイル
+                wr_cluster_ = AllocateClusterChain(num_cluster(len));
+                fat_entry_.first_cluster_low = wr_cluster_ & 0xffff;
+                fat_entry_.first_cluster_high = (wr_cluster_ >> 16) & 0xffff;
+            }
+        }
+
+        const uint8_t* buf8 = reinterpret_cast<const uint8_t*>(buf);
+
+        size_t total = 0;
+        while (total < len) {
+            if (wr_cluster_off_ == g_bytes_per_cluster) {
+                const auto next_cluster = NextCluster(wr_cluster_);
+                if (next_cluster == kEndOfClusterchain) { // 末尾クラスタに到達した場合
+                    // 空きクラスタを増やす
+                    wr_cluster_ = ExtendCluster(wr_cluster_, num_cluster(len - total));
+                } else {
+                    wr_cluster_ = next_cluster;
+                }
+                wr_cluster_off_ = 0;
+            }
+
+            uint8_t* sec = GetSectorByCluster<uint8_t>(wr_cluster_);
+            size_t n = std::min(len, g_bytes_per_cluster - wr_cluster_off_);
+            memcpy(&sec[wr_cluster_off_], &buf8[total], n);
+            total += n;
+
+            wr_cluster_off_ += n;
+        }
+
+        wr_off_ += total;
+        fat_entry_.file_size = wr_off_;
         return total;
     }
 } // namespace fat

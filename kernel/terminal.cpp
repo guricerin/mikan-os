@@ -567,7 +567,11 @@ Error Terminal::ExecuteFile(const fat::DirectoryEntry& file_entry, char* command
         return err;
     }
 
-    // fd=0に標準入力を設定
+    // fd=0,1,2に標準入力、標準出力、標準エラー出力を設定
+    for (int i = 0; i < 3; i++) {
+        task.Files().push_back(std::make_unique<TerminalFileDescriptor>(task, *this));
+    }
+
     task.Files().push_back(std::make_unique<TerminalFileDescriptor>(task, *this));
 
     // エントリポイントのアドレスを取得し、実行
@@ -675,8 +679,6 @@ Rectangle<int> Terminal::HistoryUpDown(int direction) {
     return draw_area;
 }
 
-std::map<uint64_t, Terminal*>* g_terminals;
-
 void TaskTerminal(uint64_t task_id, int64_t data) {
     // notermコマンドで起動していたら、command_lineがnullptrではなくなる
     const char* command_line = reinterpret_cast<char*>(data);
@@ -691,8 +693,6 @@ void TaskTerminal(uint64_t task_id, int64_t data) {
         g_layer_task_map->insert(std::make_pair(terminal->LayerID(), task_id));
         g_active_layer->Activate(terminal->LayerID());
     }
-    // ターミナルのタスクが起動する時、自分自身を対応表に登録
-    (*g_terminals)[task_id] = terminal;
     __asm__("sti");
 
     if (command_line) {
@@ -795,4 +795,9 @@ size_t TerminalFileDescriptor::Read(void* buf, size_t len) {
         term_.Print(bufc, 1);
         return 1;
     }
+}
+
+size_t TerminalFileDescriptor::Write(const void* buf, size_t len) {
+    term_.Print(reinterpret_cast<const char*>(buf), len);
+    return len;
 }

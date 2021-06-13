@@ -46,7 +46,7 @@ namespace syscall {
     }
 
     /// ターミナルへの文字列表示
-    /// arg1 fd : ファイルディスクリプタ番号。1はターミナルを表す番号とする
+    /// arg1 fd : ファイルディスクリプタ番号
     /// arg2 s : 表示したい文字列へのポインタ
     /// arg3 len : null文字を含まないバイト数
     SYSCALL(PutString) {
@@ -57,13 +57,17 @@ namespace syscall {
             return {0, E2BIG};
         }
 
-        if (fd == 1) {
-            // 現在実行中のタスク -> PutStringをコールしたアプリ、が動作するターミナルタスク
-            const auto task_id = g_task_manager->CurrentTask().ID();
-            (*g_terminals)[task_id]->Print(s, len);
-            return {len, 0};
+        __asm__("cli");
+        // 現在実行中のタスク -> PutStringをコールしたアプリ、が動作するターミナルタスク
+        auto& task = g_task_manager->CurrentTask();
+        __asm__("sti");
+
+        // 無効なFD
+        if (fd < 0 || task.Files().size() <= fd || !task.Files()[fd]) {
+            return {0, EBADF};
         }
-        return {0, EBADF};
+
+        return {task.Files()[fd]->Write(s, len), 0};
     }
 
     /// アプリ終了

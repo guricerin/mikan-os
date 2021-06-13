@@ -74,6 +74,22 @@ namespace {
         ExitApp(task.OSStackPointer(), 128 + SIGSEGV);
     }
 
+    /// ページフォルトが発生したらデマンドページング
+    /// ページフォルトは present=0 のページにアクセスしたり、そのページに対する権限がない場合に発生
+    __attribute__((interrupt)) void IntHandlerPF(InterruptFrame* frame, uint64_t error_code) {
+        // 例外発生原因となるメモリアドレス
+        uint64_t cr2 = GetCR2();
+        if (auto err = HandlePageFault(error_code, cr2); !err) {
+            return;
+        }
+
+        KillApp(frame);
+        PrintFrame(frame, "#PF");
+        WriteString(*g_screen_writer, {500, 16 * 4}, "ERR", {0, 0, 0});
+        PrintHex(error_code, 16, {500 + 8 * 4, 16 * 4});
+        while (true) __asm__("hlt");
+    }
+
 /// CPU例外に対応する割り込みハンドラ群
 #define FaultHandlerWithError(fault_name)                                                                \
     __attribute__((interrupt)) void IntHandler##fault_name(InterruptFrame* frame, uint64_t error_code) { \
@@ -91,24 +107,24 @@ namespace {
         while (true) __asm__("hlt");                                                \
     }
 
-    FaultHandlerNoError(DE)
-        FaultHandlerNoError(DB)
-            FaultHandlerNoError(BP)
-                FaultHandlerNoError(OF)
-                    FaultHandlerNoError(BR)
-                        FaultHandlerNoError(UD)
-                            FaultHandlerNoError(NM)
-                                FaultHandlerWithError(DF)
-                                    FaultHandlerWithError(TS)
-                                        FaultHandlerWithError(NP)
-                                            FaultHandlerWithError(SS)
-                                                FaultHandlerWithError(GP)
-                                                    FaultHandlerWithError(PF)
-                                                        FaultHandlerNoError(MF)
-                                                            FaultHandlerWithError(AC)
-                                                                FaultHandlerNoError(MC)
-                                                                    FaultHandlerNoError(XM)
-                                                                        FaultHandlerNoError(VE)
+    FaultHandlerNoError(DE);
+    FaultHandlerNoError(DB);
+    FaultHandlerNoError(BP);
+    FaultHandlerNoError(OF);
+    FaultHandlerNoError(BR);
+    FaultHandlerNoError(UD);
+    FaultHandlerNoError(NM);
+    FaultHandlerWithError(DF);
+    FaultHandlerWithError(TS);
+    FaultHandlerWithError(NP);
+    FaultHandlerWithError(SS);
+    FaultHandlerWithError(GP);
+    // FaultHandlerWithError(PF);
+    FaultHandlerNoError(MF);
+    FaultHandlerWithError(AC);
+    FaultHandlerNoError(MC);
+    FaultHandlerNoError(XM);
+    FaultHandlerNoError(VE);
 } // namespace
 
 void InitializeInterrupt() {

@@ -154,21 +154,32 @@ namespace fat {
     /// return : 新規作成されたファイルエントリ
     WithError<DirectoryEntry*> CreateFile(const char* path);
 
+    /// 指定数の空きクラスタからなるチェーンを構築
+    /// return : 構築したチェーンの先頭クラスタ番号
+    unsigned long AllocateClusterChain(size_t n);
+
     /// 各タスクがアクセスするファイルをOSカーネルが識別するための識別子、整数
     /// この型ではFAT上のファイルを扱う
     class FileDescriptor : public IFileDescriptor {
     public:
         explicit FileDescriptor(DirectoryEntry& fat_entry);
         size_t Read(void* buf, size_t len) override;
+        size_t Write(const void* buf, size_t len) override;
 
     private:
         /// ファイルへの参照
         DirectoryEntry& fat_entry_;
-        /// アイル先頭からの読み込みオフセット（byte単位）
+        /// ファイル先頭からの読み込みオフセット（byte単位）
         size_t rd_off_ = 0;
         /// rd_off_が指す位置に対応するクラスタ番号
         unsigned long rd_cluster_ = 0;
-        /// クラスタ先頭からのオフセット（byte単位）
+        /// 読み込み時のクラスタ先頭からのオフセット（byte単位）
         size_t rd_cluster_off_ = 0;
+        /// ファイル先頭からの書き込みオフセット（byte単位）
+        size_t wr_off_ = 0;
+        /// wr_off_が指す位置に対応するクラスタ番号
+        unsigned long wr_cluster_ = 0;
+        /// 書き込み時のクラスタ先頭からのオフセット（byte単位）
+        size_t wr_cluster_off_ = 0;
     };
 } // namespace fat

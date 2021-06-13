@@ -161,7 +161,6 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
     InitializeTask();
     // このタスク（KernelMainStack()）
     Task& main_task = g_task_manager->CurrentTask();
-    g_terminals = new std::map<uint64_t, Terminal*>;
 
     // USBデバイス
     // xHCIは初期化するとすぐに割り込みが発生するので、タスク機能を初期化してからにする

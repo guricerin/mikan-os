@@ -3,6 +3,8 @@
 #include <array>
 
 #include "asmfunc.h"
+#include "memory_manager.hpp"
+#include "task.hpp"
 
 namespace {
     const uint64_t kPageSize4K = 4096;
@@ -51,4 +53,16 @@ void InitializePaging() {
 
 void ResetCR3() {
     SetCR3(reinterpret_cast<uint64_t>(&g_pml4_table[0]));
+}
+
+Error HandlePageFault(uint64_t error_code, uint64_t causal_addr) {
+    auto& task = g_task_manager->CurrentTask();
+    if (error_code & 1) {
+        return MAKE_ERROR(Error::kAlreadyAllocated);
+    }
+
+    if (causal_addr < task.DPagingBegin() || task.DPagingEnd() <= causal_addr) {
+        return MAKE_ERROR(Error::kIndexOutOfRange);
+    }
+    return SetupPageMaps(LinearAddress4Level{causal_addr}, 1);
 }
