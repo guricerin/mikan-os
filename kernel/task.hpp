@@ -46,7 +46,7 @@ public:
     void SendMessage(const Message& msg);
     /// メッセージを取得
     std::optional<Message> ReceiveMessage();
-    std::vector<std::unique_ptr<fat::FileDescriptor>>& Files();
+    std::vector<std::unique_ptr<IFileDescriptor>>& Files();
 
     int Level() const { return level_; }
     bool Running() const { return running_; }
@@ -65,7 +65,7 @@ private:
     bool running_{false};
     /// ファイルディスクリプタをタスク毎に持たせる
     /// -> 番号が他のタスクとだぶっても大丈夫
-    std::vector<std::unique_ptr<fat::FileDescriptor>> files_{};
+    std::vector<std::unique_ptr<IFileDescriptor>> files_{};
 
     Task& SetLevel(int level) {
         level_ = level;

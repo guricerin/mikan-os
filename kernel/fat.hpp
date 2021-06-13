@@ -6,6 +6,8 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "file.hpp"
+
 namespace fat {
     /// パーティション : ブロックデバイスを複数に分割した1つの領域
     /// PBR (Partition Boot Record) : パーティションの先頭1ブロック
@@ -130,10 +132,11 @@ namespace fat {
     size_t LoadFile(void* buf, size_t len, const DirectoryEntry& entry);
 
     /// 各タスクがアクセスするファイルをOSカーネルが識別するための識別子、整数
-    class FileDescriptor {
+    /// この型ではFAT上のファイルを扱う
+    class FileDescriptor : public IFileDescriptor {
     public:
         explicit FileDescriptor(DirectoryEntry& fat_entry);
-        size_t Read(void* buf, size_t len);
+        size_t Read(void* buf, size_t len) override;
 
     private:
         /// ファイルへの参照

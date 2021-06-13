@@ -59,3 +59,15 @@ private:
 extern std::map<uint64_t, Terminal*>* g_terminals;
 
 void TaskTerminal(uint64_t task_id, int64_t data);
+
+/// キーボードをファイルに見せかける（標準入力）
+class TerminalFileDescriptor : public IFileDescriptor {
+public:
+    explicit TerminalFileDescriptor(Task& task, Terminal& term);
+    /// キーボード入力から1文字だけ読み取る
+    size_t Read(void* buf, size_t len) override;
+
+private:
+    Task& task_;
+    Terminal& term_;
+};

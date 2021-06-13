@@ -368,6 +368,12 @@ namespace syscall {
         auto& task = g_task_manager->CurrentTask();
         __asm__("sti");
 
+        // 標準入力に特殊なファイル名を与える
+        // アプリ側では fopen("@stdin", "r") で標準入力を取得できる
+        if (strcmp(path, "@stdin") == 0) {
+            return {0, 0};
+        }
+
         // flagsの属性ビットを無視してアクセスモードのみを抽出
         if ((flags & O_ACCMODE) == O_WRONLY) {
             return {0, EINVAL};
