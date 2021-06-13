@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "error.hpp"
 #include "file.hpp"
 
 namespace fat {
@@ -130,6 +131,28 @@ namespace fat {
     /// entry : ファイルを表すディレクトリエントリ
     /// ret : 読み込んだバイト数
     size_t LoadFile(void* buf, size_t len, const DirectoryEntry& entry);
+
+    bool IsEndOfClusterchain(unsigned long cluster);
+
+    /// ボリュームイメージの中のFAT構造の先頭アドレスを取得
+    uint32_t* GetFAT();
+
+    /// 指定クラスタ数だけクラスタチェーンを伸長
+    /// eoc_cluster : 伸長したいクラスタチェーンに属するいすれかのクラスタ番号
+    /// n : 伸長後のチェーンにおける最後尾のクラスタ番号
+    unsigned long ExtendCluster(unsigned long eoc_cluster, size_t n);
+
+    /// 指定ディレクトリの空きエントリを1つ返す
+    DirectoryEntry* AllocateEntry(unsigned long dir_cluster);
+
+    /// ディレクトリエントリに短ファイル名を設定
+    /// entry : 対象のディレクトリエントリ
+    /// name : 基本名と拡張子を . で結合したファイル名
+    void SetFileName(DirectoryEntry& entry, const char* name);
+
+    /// 指定パスにファイルエントリを作成
+    /// return : 新規作成されたファイルエントリ
+    WithError<DirectoryEntry*> CreateFile(const char* path);
 
     /// 各タスクがアクセスするファイルをOSカーネルが識別するための識別子、整数
     /// この型ではFAT上のファイルを扱う

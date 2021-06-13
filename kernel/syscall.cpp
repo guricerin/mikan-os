@@ -358,6 +358,22 @@ namespace syscall {
             task.Files().emplace_back();
             return num_files;
         }
+
+        /// ファイルを作成する
+        /// return : 作成したディレクトリエントリ、エラーコード
+        std::pair<fat::DirectoryEntry*, int> CreateFile(const char* path) {
+            auto [file, err] = fat::CreateFile(path);
+            switch (err.Cause()) {
+            case Error::kIsDirectory:
+                return {file, EISDIR};
+            case Error::kNoSuchEntry:
+                return {file, ENOENT};
+            case Error::kNoEnoughMemory:
+                return {file, ENOSPC};
+            default:
+                return {file, 0};
+            }
+        }
     } // namespace
 
     /// 指定パスのファイルを指定モードで開く
@@ -374,20 +390,24 @@ namespace syscall {
             return {0, 0};
         }
 
-        // flagsの属性ビットを無視してアクセスモードのみを抽出
-        if ((flags & O_ACCMODE) == O_WRONLY) {
-            return {0, EINVAL};
-        }
+        auto [file, post_slash] = fat::FindFile(path);
+        if (file == nullptr) {
+            if ((flags & O_CREAT) == 0) {
+                return {0, ENOENT}; // no entry
+            }
 
-        auto [dir, post_slash] = fat::FindFile(path);
-        if (dir == nullptr) {
-            return {0, ENOENT}; // no entry
-        } else if (dir->attr != fat::Attribute::kDirectory && post_slash) {
+            // O_CREATが指定されている場合、新規作成
+            auto [new_file, err] = CreateFile(path);
+            if (err) {
+                return {0, err};
+            }
+            file = new_file;
+        } else if (file->attr != fat::Attribute::kDirectory && post_slash) {
             return {0, ENOENT}; // no entry
         }
 
         size_t fd = AllocateFD(task);
-        task.Files()[fd] = std::make_unique<fat::FileDescriptor>(*dir);
+        task.Files()[fd] = std::make_unique<fat::FileDescriptor>(*file);
         return {fd, 0};
     }
 

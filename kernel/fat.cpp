@@ -158,6 +158,116 @@ namespace fat {
         return p - buf_uint8;
     }
 
+    bool IsEndOfClusterchain(unsigned long cluster) {
+        return cluster >= 0x0ffffff8ul;
+    }
+
+    uint32_t* GetFAT() {
+        uintptr_t fat_offset = g_boot_volume_image->reserved_sector_count * g_boot_volume_image->bytes_per_sector;
+        return reinterpret_cast<uint32_t*>(
+            reinterpret_cast<uintptr_t>(g_boot_volume_image) +
+            fat_offset);
+    }
+
+    unsigned long ExtendCluster(unsigned long eoc_cluster, size_t n) {
+        uint32_t* fat = GetFAT();
+        while (!IsEndOfClusterchain(fat[eoc_cluster])) {
+            eoc_cluster = fat[eoc_cluster];
+        }
+
+        size_t num_allocated = 0;
+        auto current = eoc_cluster;
+
+        for (unsigned long candidate = 2; num_allocated < n; candidate++) {
+            if (fat[candidate] != 0) { // candidate cluster is not free
+                continue;
+            }
+
+            fat[current] = candidate;
+            current = candidate;
+            num_allocated++;
+        }
+        fat[current] = kEndOfClusterchain;
+        return current;
+    }
+
+    DirectoryEntry* AllocateEntry(unsigned long dir_cluster) {
+        while (true) {
+            auto dir = GetSectorByCluster<DirectoryEntry>(dir_cluster);
+            for (int i = 0; i < g_bytes_per_cluster / sizeof(DirectoryEntry); i++) {
+                if (dir[i].name[0] == 0 || dir[i].name[0] == 0xe5) { // 未使用エントリを発見
+                    return &dir[i];
+                }
+            }
+
+            auto next = NextCluster(dir_cluster);
+            if (next == kEndOfClusterchain) {
+                break;
+            }
+
+            dir_cluster = next;
+        }
+
+        // 未使用エントリがない場合、ディレクトリのデータ領域を1クラスタ分伸長
+        dir_cluster = ExtendCluster(dir_cluster, 1);
+        auto dir = GetSectorByCluster<DirectoryEntry>(dir_cluster);
+        memset(dir, 0, g_bytes_per_cluster);
+        return &dir[0];
+    }
+
+    void SetFileName(DirectoryEntry& entry, const char* name) {
+        const char* dot_pos = strrchr(name, '.');
+        memset(entry.name, ' ', 8 + 3);
+
+        if (dot_pos) { // 拡張子あり
+            for (int i = 0; i < 8 && i < dot_pos - name; i++) {
+                entry.name[i] = toupper(name[i]);
+            }
+            for (int i = 0; i < 3 && dot_pos[i + 1]; i++) {
+                entry.name[8 + i] = toupper(dot_pos[i + 1]);
+            }
+        } else { // 拡張子なし
+            for (int i = 0; i < 8 && name[i]; i++) {
+                entry.name[i] = toupper(name[i]);
+            }
+        }
+    }
+
+    WithError<DirectoryEntry*> CreateFile(const char* path) {
+        // 空ファイルを作成するディレクトリ
+        auto parent_dir_cluster = fat::g_boot_volume_image->root_cluster;
+        const char* filename = path;
+
+        if (const char* slash_pos = strrchr(path, '/')) { // パスにディレクトリ名が含まれている場合
+
+            // pathの右端
+            filename = &slash_pos[1];
+            if (slash_pos[1] == '\0') {
+                return {nullptr, MAKE_ERROR(Error::kIsDirectory)};
+            }
+
+            char parent_dir_name[slash_pos - path + 1];
+            strncpy(parent_dir_name, path, slash_pos - path);
+            parent_dir_name[slash_pos - path] = '\0';
+
+            if (parent_dir_name[0] != '\0') {
+                auto [parent_dir, post_slash2] = fat::FindFile(parent_dir_name);
+                if (parent_dir == nullptr) {
+                    return {nullptr, MAKE_ERROR(Error::kNoSuchEntry)};
+                }
+                parent_dir_cluster = parent_dir->FirstCluster();
+            }
+        }
+
+        auto dir = fat::AllocateEntry(parent_dir_cluster);
+        if (dir == nullptr) {
+            return {nullptr, MAKE_ERROR(Error::kNoEnoughMemory)};
+        }
+        fat::SetFileName(*dir, filename);
+        dir->file_size = 0;
+        return {dir, MAKE_ERROR(Error::kSuccess)};
+    }
+
     FileDescriptor::FileDescriptor(DirectoryEntry& fat_entry) : fat_entry_{fat_entry} {
     }
 
