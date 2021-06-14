@@ -41,6 +41,12 @@ private:
 /// 未定義のページフレーム番号（null番人）
 static const FrameID kNullFrame{std::numeric_limits<size_t>::max()};
 
+/// メモリ状態（物理フレーム）
+struct MemoryStat {
+    size_t allocated_frames;
+    size_t total_frames;
+};
+
 /// ビットマップ配列を用いてページフレーム単位でメモリ管理するクラス
 /// 配列alloc_map_の各ビットがページフレームに対応し、0なら空き、1なら使用中
 /// alloc_map_[n]のmビット目が対応する物理アドレスは次の式で求まる
@@ -67,6 +73,9 @@ public:
     /// このメモリマネージャーで扱うメモリ範囲を設定
     /// この呼出以降、Allocateによるメモリ割り当ては設定された範囲内でのみ行われる
     void SetMemoryRange(FrameID range_begin, FrameID range_end);
+
+    /// 現在のメモリ状態
+    MemoryStat Stat() const;
 
 private:
     /// 1ページフレームを1ビットで表したビットマップ
