@@ -14,6 +14,8 @@ void LoadGDT(uint16_t limit, uint64_t offset);
 void SetCSSS(uint16_t cs, uint16_t ss);
 /// DS（データセグメントレジスタ）を設定
 void SetDSAll(uint16_t value);
+/// 例外が発生したメモリアドレスを取得
+uint64_t GetCR2();
 /// CR3レジスタを設定し、自前の階層ページング構造が利用可能となる
 /// 再設定することで別のページング構造に切り替えることも可能
 void SetCR3(uint64_t value);

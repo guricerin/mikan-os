@@ -119,4 +119,10 @@ Error SetupPageMaps(LinearAddress4Level addr, size_t num_4kpages);
 Error CleanPageMaps(LinearAddress4Level addr);
 /// デマンドページング : 初めはどのページに対してもフレームを割り当てないでおき、
 /// ページに初めてアクセスされたときにそのページだけフレームを割り当てる
+/// ページフォルトのエラーコードのビット定義 :
+/// bit位置 | bit名 | 意味
+/// 0       | P     | 0 = 存在しないページ、1 = ページの権限違反
+/// 1       | W/R   | 0 = 読み込み、1 = 書き込み
+/// 2       | U/S   | 0 = スーパーバイザーモードのアクセス、1 = ユーザーモードのアクセス
+/// 3       | RSVD  | 0 = 予約ビットの違反が例外の原因ではない、1 = 予約ビットが1になっている
 Error HandlePageFault(uint64_t error_code, uint64_t causal_addr);

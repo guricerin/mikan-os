@@ -16,6 +16,8 @@ struct SyscallResult {
     int error;
 };
 
+// プロトタイプ宣言は kernel/syscall.cpp に合わせる
+
 struct SyscallResult SyscallLogString(enum LogLevel level, const char* message);
 struct SyscallResult SyscallPutString(uint64_t, uint64_t, uint64_t);
 void SyscallExit(int exit_code);
@@ -36,6 +38,7 @@ struct SyscallResult SyscallCreateTimer(unsigned int type, int timer_value, unsi
 
 struct SyscallResult SyscallOpenFile(const char* path, int flags);
 struct SyscallResult SyscallReadFile(int fd, void* buf, size_t count);
+struct SyscallResult SyscallDemandPages(size_t num_pages, int flags);
 
 #ifdef __cplusplus
 } // extern "C"

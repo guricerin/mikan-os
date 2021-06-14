@@ -47,6 +47,10 @@ public:
     /// メッセージを取得
     std::optional<Message> ReceiveMessage();
     std::vector<std::unique_ptr<IFileDescriptor>>& Files();
+    uint64_t DPagingBegin() const;
+    void SetDPagingBegin(uint64_t v);
+    uint64_t DPagingEnd() const;
+    void SetDPagingEnd(uint64_t v);
 
     int Level() const { return level_; }
     bool Running() const { return running_; }
@@ -66,6 +70,8 @@ private:
     /// ファイルディスクリプタをタスク毎に持たせる
     /// -> 番号が他のタスクとだぶっても大丈夫
     std::vector<std::unique_ptr<IFileDescriptor>> files_{};
+    /// デマンドページングのアドレス範囲
+    uint64_t dpaging_begin_{0}, dpaging_end_{0};
 
     Task& SetLevel(int level) {
         level_ = level;

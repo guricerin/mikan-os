@@ -82,6 +82,22 @@ std::vector<std::unique_ptr<IFileDescriptor>>& Task::Files() {
     return files_;
 }
 
+uint64_t Task::DPagingBegin() const {
+    return dpaging_begin_;
+}
+
+void Task::SetDPagingBegin(uint64_t v) {
+    dpaging_begin_ = v;
+}
+
+uint64_t Task::DPagingEnd() const {
+    return dpaging_end_;
+}
+
+void Task::SetDPagingEnd(uint64_t v) {
+    dpaging_end_ = v;
+}
+
 TaskManager::TaskManager() {
     // 最初に突っ込んでおくのは優先度最高のメインタスク
     // idは常に1

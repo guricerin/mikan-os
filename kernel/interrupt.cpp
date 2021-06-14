@@ -5,6 +5,7 @@
 #include "asmfunc.h"
 #include "font.hpp"
 #include "graphics.hpp"
+#include "paging.hpp"
 #include "segment.hpp"
 #include "task.hpp"
 #include "timer.hpp"

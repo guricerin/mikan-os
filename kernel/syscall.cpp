@@ -430,6 +430,21 @@ namespace syscall {
         }
         return {task.Files()[fd]->Read(buf, count), 0};
     }
+
+    /// デマンドページング可能なアドレス範囲を拡大
+    /// このシステムコールは、アプリ側にはメモリ確保と同義
+    SYSCALL(DemandPages) {
+        const size_t num_pages = arg1;
+        // const int flags = arg2;
+        __asm__("cli");
+        auto& task = g_task_manager->CurrentTask();
+        __asm__("sti");
+
+        const uint64_t dp_end = task.DPagingEnd();
+        // 指定ページ数の分だけ終端を後ろにずらす
+        task.SetDPagingEnd(dp_end + 4096 * num_pages);
+        return {dp_end, 0};
+    }
 #undef SYSCALL
 
 } // namespace syscall
@@ -439,7 +454,7 @@ using SyscallFuncType = syscall::Result(uint64_t, uint64_t, uint64_t, uint64_t, 
 
 /// システムコールの（関数ポインタ）テーブル
 /// この添字に0x80000000を足した値をシステムコール番号とする
-extern "C" std::array<SyscallFuncType*, 0xe> g_syscall_table{
+extern "C" std::array<SyscallFuncType*, 0xf> g_syscall_table{
     /* 0x00 */ syscall::LogString,
     /* 0x01 */ syscall::PutString,
     /* 0x02 */ syscall::Exit,
@@ -454,6 +469,7 @@ extern "C" std::array<SyscallFuncType*, 0xe> g_syscall_table{
     /* 0x0b */ syscall::CreateTimer,
     /* 0x0c */ syscall::OpenFile,
     /* 0x0d */ syscall::ReadFile,
+    /* 0x0e */ syscall::DemandPages,
 };
 
 void InitializeSyscall() {

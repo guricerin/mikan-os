@@ -66,14 +66,27 @@ ssize_t read(int fd, void* buf, size_t count) {
     return -1;
 }
 
-/// メモリ非割り当て領域の先頭アドレスをいじくる
+/// メモリ非割り当て領域の先頭アドレス（プログラムブレーク）をいじくる
 /// -> 加算ならメモリ確保、減算ならメモリ解放
 caddr_t sbrk(int incr) {
-    static uint8_t heap[4096];
-    static int i = 0;
-    int prev = i;
-    i += incr;
-    return (caddr_t)&heap[prev];
+    static uint64_t dpage_end = 0;
+    static uint64_t program_break = 0;
+
+    if (dpage_end == 0 || dpage_end < program_break + incr) {
+        // 1ページ / 4KiB 単位
+        int num_pages = (incr + 4095) / 4096; // 切り上げ
+        struct SyscallResult res = SyscallDemandPages(num_pages, 0);
+        if (res.error) {
+            errno = ENOMEM;
+            return (caddr_t)-1;
+        }
+        program_break = res.value;
+        dpage_end = res.value + 4096 * num_pages;
+    }
+
+    const uint64_t prev_break = program_break;
+    program_break += incr;
+    return (caddr_t)prev_break;
 }
 
 ssize_t write(int fd, const void* buf, size_t count) {
