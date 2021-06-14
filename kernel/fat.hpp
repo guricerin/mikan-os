@@ -130,7 +130,7 @@ namespace fat {
     /// len : バッファの大きさ（byte単位）
     /// entry : ファイルを表すディレクトリエントリ
     /// ret : 読み込んだバイト数
-    size_t LoadFile(void* buf, size_t len, const DirectoryEntry& entry);
+    size_t LoadFile(void* buf, size_t len, DirectoryEntry& entry);
 
     bool IsEndOfClusterchain(unsigned long cluster);
 
@@ -163,8 +163,14 @@ namespace fat {
     class FileDescriptor : public IFileDescriptor {
     public:
         explicit FileDescriptor(DirectoryEntry& fat_entry);
+        /// ファイル読み込み
         size_t Read(void* buf, size_t len) override;
+        /// ファイル書き込み
         size_t Write(const void* buf, size_t len) override;
+        /// ファイルサイズ
+        size_t Size() const override { return fat_entry_.file_size; }
+        /// 指定位置からファイルを読む
+        size_t Load(void* buf, size_t len, size_t offset) override;
 
     private:
         /// ファイルへの参照

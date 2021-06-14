@@ -49,7 +49,7 @@ private:
     /// コマンド実行
     void ExecuteLine();
     /// 実行可能ファイル（カーネル本体に組み込まれていないアプリ）を読み込んで実行
-    Error ExecuteFile(const fat::DirectoryEntry& file_entry, char* command, char* first_arg);
+    Error ExecuteFile(fat::DirectoryEntry& file_entry, char* command, char* first_arg);
     void Print(char c);
     /// コマンド履歴を辿る
     Rectangle<int> HistoryUpDown(int direction);
@@ -65,6 +65,8 @@ public:
     size_t Read(void* buf, size_t len) override;
     /// ターミナルに出力する（標準出力）
     size_t Write(const void* buf, size_t len) override;
+    size_t Size() const override { return 0; }
+    size_t Load(void* buf, size_t len, size_t offset) override;
 
 private:
     Task& task_;

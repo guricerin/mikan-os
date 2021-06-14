@@ -143,6 +143,33 @@ namespace {
 
         return MAKE_ERROR(Error::kSuccess);
     }
+
+    /// 指定アドレスを含むファイルマッピングを探す
+    const FileMapping* FindFileMapping(const std::vector<FileMapping>& fmaps, uint64_t causal_addr) {
+        for (const FileMapping& m : fmaps) {
+            if (m.vaddr_begin <= causal_addr && causal_addr < m.vaddr_end) {
+                return &m;
+            }
+        }
+
+        return nullptr;
+    }
+
+    /// 指定ページを作成しファイルをコピーする
+    Error PreparePageCache(IFileDescriptor& fd, const FileMapping& m, uint64_t causal_vaddr) {
+        LinearAddress4Level page_vaddr{causal_vaddr};
+        page_vaddr.parts.offset = 0;
+        // 4KiBページ作成
+        if (auto err = SetupPageMaps(page_vaddr, 1)) {
+            return err;
+        }
+
+        const long file_offset = page_vaddr.value - m.vaddr_begin;
+        void* page_cache = reinterpret_cast<void*>(page_vaddr.value);
+        // ページ（が指すフレーム）にファイルデータをコピー
+        fd.Load(page_cache, 4096, file_offset);
+        return MAKE_ERROR(Error::kSuccess);
+    }
 } // namespace
 
 /// 新たなページング構造を生成
@@ -162,8 +189,8 @@ Error FreePageMap(PageMapEntry* table) {
     return g_memory_manager->Free(frame, 1);
 }
 
-/// 階層ページング構造の設定
-/// addr : LOADセグメントを配置する先頭アドレス
+/// 階層ページング構造の設定。仮想アドレス（ページ）を物理アドレス（フレーム）に割り当てる。
+/// addr : データを配置する先頭アドレス
 /// num_4kPages : 4KiBページ単位のセグメントの大きさ
 Error SetupPageMaps(LinearAddress4Level addr, size_t num_4kpages) {
     auto pml4_table = reinterpret_cast<PageMapEntry*>(GetCR3());
@@ -190,10 +217,17 @@ Error HandlePageFault(uint64_t error_code, uint64_t causal_addr) {
         return MAKE_ERROR(Error::kAlreadyAllocated);
     }
 
-    // アプリは事前にアドレス範囲を申告しておくことで、バグによるメモリ枯渇を防ぐ
-    if (causal_addr < task.DPagingBegin() || task.DPagingEnd() <= causal_addr) {
-        return MAKE_ERROR(Error::kIndexOutOfRange);
+    // デマンドページングの処理
+    if (task.DPagingBegin() <= causal_addr && causal_addr < task.DPagingEnd()) {
+        // ページフォルトの原因となったページに物理フレームを割り当てる
+        return SetupPageMaps(LinearAddress4Level{causal_addr}, 1);
     }
-    // ページフォルトの原因となったページに物理フレームを割り当てる
-    return SetupPageMaps(LinearAddress4Level{causal_addr}, 1);
+
+    // メモリマップドファイルの処理
+    if (auto m = FindFileMapping(task.FileMaps(), causal_addr)) {
+        return PreparePageCache(*task.Files()[m->fd], *m, causal_addr);
+    }
+
+    // アプリは事前にアドレス範囲を申告しておくことで、バグによるメモリ枯渇を防ぐ
+    return MAKE_ERROR(Error::kIndexOutOfRange);
 }

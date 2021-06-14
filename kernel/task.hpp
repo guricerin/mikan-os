@@ -27,6 +27,14 @@ using TaskFunc = void(uint64_t, int64_t);
 
 class TaskManager;
 
+/// ファイルの内容を仮想アドレス空間にマッピング
+struct FileMapping {
+    /// ファイルディスクリプタ
+    int fd;
+    /// 仮想アドレス範囲
+    uint64_t vaddr_begin, vaddr_end;
+};
+
 /// タスク : 動作中のプログラム。処理単位。
 class Task {
 public:
@@ -51,6 +59,9 @@ public:
     void SetDPagingBegin(uint64_t v);
     uint64_t DPagingEnd() const;
     void SetDPagingEnd(uint64_t v);
+    uint64_t FileMapEnd() const;
+    void SetFileMapEnd(uint64_t v);
+    std::vector<FileMapping>& FileMaps();
 
     int Level() const { return level_; }
     bool Running() const { return running_; }
@@ -70,8 +81,11 @@ private:
     /// ファイルディスクリプタをタスク毎に持たせる
     /// -> 番号が他のタスクとだぶっても大丈夫
     std::vector<std::unique_ptr<IFileDescriptor>> files_{};
-    /// デマンドページングのアドレス範囲
+    /// デマンドページングの仮想アドレス範囲
     uint64_t dpaging_begin_{0}, dpaging_end_{0};
+    /// メモリマップドファイルに利用される仮想アドレス範囲
+    uint64_t file_map_end_{0};
+    std::vector<FileMapping> file_maps_{};
 
     Task& SetLevel(int level) {
         level_ = level;

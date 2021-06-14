@@ -393,7 +393,7 @@ void Terminal::ExecuteLine() {
     }
 }
 
-Error Terminal::ExecuteFile(const fat::DirectoryEntry& file_entry, char* command, char* first_arg) {
+Error Terminal::ExecuteFile(fat::DirectoryEntry& file_entry, char* command, char* first_arg) {
     std::vector<uint8_t> file_buf(file_entry.file_size);
     fat::LoadFile(&file_buf[0], file_buf.size(), file_entry);
 
@@ -454,11 +454,14 @@ Error Terminal::ExecuteFile(const fat::DirectoryEntry& file_entry, char* command
     // アプリに関連する仮想アドレス範囲は以下のようになる
     // [0xffff 8000 0000 0000, elf_last_addr] : アプリのELF
     // [elf_next_page (dpaging_begin_), dpaging_end_) : アプリのデマンドページング範囲
+    // [dpaging_end_, 0xffff ffff ffff e000) : メモリマップドファイル範囲。メモリを拡大するときは前方に進める。
     // [0xffff ffff ffff e000, 0xffff ffff ffff f000) : スタック領域
     // [0xffff ffff ffff f000, ] : コマンドライン引数領域
     const uint64_t elf_next_page = (elf_last_addr + 4095) & 0xfffffffffffff000; // 4KiB単位のアドレスに切り上げ
     task.SetDPagingBegin(elf_next_page);
     task.SetDPagingEnd(elf_next_page);
+
+    task.SetFileMapEnd(0xffffffffffffe000);
 
     // エントリポイントのアドレスを取得し、実行
     auto entry_addr = elf_header->e_entry;
@@ -470,6 +473,7 @@ Error Terminal::ExecuteFile(const fat::DirectoryEntry& file_entry, char* command
                       &task.OSStackPointer()); // アプリ終了時に復帰するスタックポインタ
 
     task.Files().clear();
+    task.FileMaps().clear();
 
     char s[64];
     sprintf(s, "app exited. ret = %d\n", ret);
@@ -686,4 +690,8 @@ size_t TerminalFileDescriptor::Read(void* buf, size_t len) {
 size_t TerminalFileDescriptor::Write(const void* buf, size_t len) {
     term_.Print(reinterpret_cast<const char*>(buf), len);
     return len;
+}
+
+size_t TerminalFileDescriptor::Load(void* buf, size_t len, size_t offset) {
+    return 0;
 }

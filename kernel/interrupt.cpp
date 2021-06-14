@@ -78,7 +78,7 @@ namespace {
     /// ページフォルトが発生したらデマンドページング
     /// ページフォルトは present=0 のページにアクセスしたり、そのページに対する権限がない場合に発生
     __attribute__((interrupt)) void IntHandlerPF(InterruptFrame* frame, uint64_t error_code) {
-        // 例外発生原因となるメモリアドレス
+        // 例外発生原因となったメモリアドレス
         uint64_t cr2 = GetCR2();
         if (auto err = HandlePageFault(error_code, cr2); !err) {
             return;

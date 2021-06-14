@@ -445,6 +445,29 @@ namespace syscall {
         task.SetDPagingEnd(dp_end + 4096 * num_pages);
         return {dp_end, 0};
     }
+
+    /// ファイルマッピングを登録
+    /// 実際に登録するタイミングは、ページフォルトのCPU例外が発生してから
+    SYSCALL(MapFile) {
+        const int fd = arg1;
+        size_t* file_size = reinterpret_cast<size_t*>(arg2);
+        // const int flags = arg3;
+        __asm__("cli");
+        auto& task = g_task_manager->CurrentTask();
+        __asm__("sti");
+
+        // 無効なファイルディスクリプタ
+        if (fd < 0 || task.Files().size() <= fd || !task.Files()[fd]) {
+            return {0, EBADF};
+        }
+
+        *file_size = task.Files()[fd]->Size();
+        const uint64_t vaddr_end = task.FileMapEnd();
+        const uint64_t vaddr_begin = (vaddr_end - *file_size) & 0xfffffffffffff000;
+        task.SetFileMapEnd(vaddr_begin);
+        task.FileMaps().push_back(FileMapping{fd, vaddr_begin, vaddr_end});
+        return {vaddr_begin, 0};
+    }
 #undef SYSCALL
 
 } // namespace syscall
@@ -454,7 +477,7 @@ using SyscallFuncType = syscall::Result(uint64_t, uint64_t, uint64_t, uint64_t, 
 
 /// システムコールの（関数ポインタ）テーブル
 /// この添字に0x80000000を足した値をシステムコール番号とする
-extern "C" std::array<SyscallFuncType*, 0xf> g_syscall_table{
+extern "C" std::array<SyscallFuncType*, 0x10> g_syscall_table{
     /* 0x00 */ syscall::LogString,
     /* 0x01 */ syscall::PutString,
     /* 0x02 */ syscall::Exit,
@@ -470,6 +493,7 @@ extern "C" std::array<SyscallFuncType*, 0xf> g_syscall_table{
     /* 0x0c */ syscall::OpenFile,
     /* 0x0d */ syscall::ReadFile,
     /* 0x0e */ syscall::DemandPages,
+    /* 0x0f */ syscall::MapFile,
 };
 
 void InitializeSyscall() {
