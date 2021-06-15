@@ -97,8 +97,11 @@ namespace {
             LinearAddress4Level dest_addr;
             dest_addr.value = phdr[i].p_vaddr;
             last_addr = std::max(last_addr, phdr[i].p_paddr + phdr[i].p_memsz);
-            const auto num_4kpages = (phdr[i].p_memsz + 4096) / 4096;
-            if (auto err = SetupPageMaps(dest_addr, num_4kpages)) {
+            const auto num_4kpages = (phdr[i].p_memsz + 4095) / 4096;
+
+            // setup pagemaps as readonly (writable = false)
+            // -> for copy on write
+            if (auto err = SetupPageMaps(dest_addr, num_4kpages, false)) {
                 return {last_addr, err};
             }
 
@@ -178,7 +181,58 @@ namespace {
             dir_cluster = fat::NextCluster(dir_cluster);
         }
     }
+
+    /// コピーオンライト
+    /// 起動しようとしたアプリが既に起動されたことがあれば、階層ページング構造だけをコピーする
+    /// そうでなければELFファイルのデータをメモリにロード
+    WithError<AppLoadInfo> LoadApp(fat::DirectoryEntry& file_entry, Task& task) {
+        PageMapEntry* temp_pml4;
+        if (auto [pml4, err] = SetupPML4(task); err) {
+            return {{}, err};
+        } else {
+            temp_pml4 = pml4;
+        }
+
+        /// 起動されたことがある -> ELFファイルデータが既にメモリに読み込まれている
+        if (auto it = g_app_loads->find(&file_entry); it != g_app_loads->end()) {
+            AppLoadInfo app_load = it->second;
+            // アプリ領域（[256, 511]）をコピー（物理フレームのコピーはしない）
+            auto err = CopyPageMaps(temp_pml4, app_load.pml4, 4, 256);
+            app_load.pml4 = temp_pml4;
+            return {app_load, err};
+        }
+
+        std::vector<uint8_t> file_buf(file_entry.file_size);
+        fat::LoadFile(&file_buf[0], file_buf.size(), file_entry);
+
+        auto elf_header = reinterpret_cast<Elf64_Ehdr*>(&file_buf[0]);
+        // ELF形式でなければエラー
+        if (memcmp(elf_header->e_ident, "\x7f"
+                                        "ELF",
+                   4) != 0) {
+            return {{}, MAKE_ERROR(Error::kInvalidFile)};
+        }
+
+        // 実行可能ファイルをロード
+        auto [last_addr, err_load] = LoadElf(elf_header);
+        if (err_load) {
+            return {{}, err_load};
+        }
+
+        AppLoadInfo app_load{last_addr, elf_header->e_entry, temp_pml4};
+        g_app_loads->insert(std::make_pair(&file_entry, app_load));
+
+        if (auto [pml4, err] = SetupPML4(task); err) {
+            return {app_load, err};
+        } else {
+            app_load.pml4 = pml4;
+        }
+        auto err = CopyPageMaps(app_load.pml4, temp_pml4, 4, 256);
+        return {app_load, err};
+    }
 } // namespace
+
+std::map<fat::DirectoryEntry*, AppLoadInfo>* g_app_loads;
 
 Terminal::Terminal(uint64_t task_id, bool show_window) : task_id_{task_id}, show_window_{show_window} {
     if (show_window) {
@@ -406,32 +460,14 @@ void Terminal::ExecuteLine() {
 }
 
 Error Terminal::ExecuteFile(fat::DirectoryEntry& file_entry, char* command, char* first_arg) {
-    std::vector<uint8_t> file_buf(file_entry.file_size);
-    fat::LoadFile(&file_buf[0], file_buf.size(), file_entry);
-
-    auto elf_header = reinterpret_cast<Elf64_Ehdr*>(&file_buf[0]);
-    // フラットバイナリ（ファイルの先頭に実行可能な機械語が配置されている）の場合
-    // CPL=0（実行権限がOSカーネルモードのまま）なので、もう実行しない
-    if (memcmp(elf_header->e_ident, "\x7f"
-                                    "ELF",
-               4) != 0) {
-        return MAKE_ERROR(Error::kInvalidFile);
-    }
-
-    // elf形式の場合
-
     // アプリ独自の仮想アドレスに実行可能ファイルをロードするため、事前にタスク固有の階層ページング構造を設定
     __asm__("cli");
     auto& task = g_task_manager->CurrentTask();
     __asm__("sti");
-    if (auto pml4 = SetupPML4(task); pml4.error) {
-        return pml4.error;
-    }
 
-    // 実行可能ファイルをロード
-    const auto [elf_last_addr, elf_err] = LoadElf(elf_header);
-    if (elf_err) {
-        return elf_err;
+    auto [app_load, err] = LoadApp(file_entry, task);
+    if (err) {
+        return err;
     }
 
     // コマンドライン引数を取得
@@ -469,18 +505,17 @@ Error Terminal::ExecuteFile(fat::DirectoryEntry& file_entry, char* command, char
     // [dpaging_end_, 0xffff ffff ffff e000) : メモリマップドファイル範囲。メモリを拡大するときは前方に進める。
     // [0xffff ffff ffff e000, 0xffff ffff ffff f000) : スタック領域
     // [0xffff ffff ffff f000, ] : コマンドライン引数領域
-    const uint64_t elf_next_page = (elf_last_addr + 4095) & 0xfffffffffffff000; // 4KiB単位のアドレスに切り上げ
+    const uint64_t elf_next_page = (app_load.vaddr_end + 4096) & 0xfffffffffffff000; // 4KiB単位のアドレスに切り上げ
     task.SetDPagingBegin(elf_next_page);
     task.SetDPagingEnd(elf_next_page);
 
     task.SetFileMapEnd(0xffffffffffffe000);
 
     // エントリポイントのアドレスを取得し、実行
-    auto entry_addr = elf_header->e_entry;
     int ret = CallApp(argc.value,
                       argv,
                       3 << 3 | 3,
-                      entry_addr,
+                      app_load.entry,
                       stack_frame_addr.value + 4096 - 8,
                       &task.OSStackPointer()); // アプリ終了時に復帰するスタックポインタ
 
@@ -492,8 +527,8 @@ Error Terminal::ExecuteFile(fat::DirectoryEntry& file_entry, char* command, char
     Print(s);
 
     // アプリ終了後、使用したメモリ領域を解放
-    const auto addr_first = GetFirstLoadAddress(elf_header);
-    if (auto err = CleanPageMaps(LinearAddress4Level{addr_first})) {
+    const uint64_t addr_first = 0xffff800000000000;
+    if (auto err = CleanPageMaps(LinearAddress4Level{0xffff800000000000})) {
         return err;
     }
 

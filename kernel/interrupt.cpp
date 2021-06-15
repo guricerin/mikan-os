@@ -88,6 +88,7 @@ namespace {
         PrintFrame(frame, "#PF");
         WriteString(*g_screen_writer, {500, 16 * 4}, "ERR", {0, 0, 0});
         PrintHex(error_code, 16, {500 + 8 * 4, 16 * 4});
+        // カーネルをパニックさせる
         while (true) __asm__("hlt");
     }
 

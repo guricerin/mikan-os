@@ -27,7 +27,7 @@ using TaskFunc = void(uint64_t, int64_t);
 
 class TaskManager;
 
-/// ファイルの内容を仮想アドレス空間にマッピング
+/// ファイルの内容を仮想アドレス空間の連続した領域にマッピング
 struct FileMapping {
     /// ファイルディスクリプタ
     int fd;

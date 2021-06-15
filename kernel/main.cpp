@@ -168,6 +168,8 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
     InitializeKeyboard();
     InitializeMouse();
 
+    // コピーオンライトの仕組みを初期化
+    g_app_loads = new std::map<fat::DirectoryEntry*, AppLoadInfo>;
     // ターミナル
     g_task_manager->NewTask()
         .InitContext(TaskTerminal, 0)

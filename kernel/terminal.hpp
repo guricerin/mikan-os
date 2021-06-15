@@ -8,8 +8,23 @@
 
 #include "fat.hpp"
 #include "layer.hpp"
+#include "paging.hpp"
 #include "task.hpp"
 #include "window.hpp"
+
+/// アプリをロードした後の状態
+struct AppLoadInfo {
+    /// アプリのLOADセグメントの最終アドレス
+    /// デマンドページングのアドレス範囲開始点として使用
+    uint64_t vaddr_end;
+    /// アプリのエントリポイントのアドレス
+    uint64_t entry;
+    /// アプリ固有の階層ページング構造
+    PageMapEntry* pml4;
+};
+
+/// ロード済みアプリの一覧
+extern std::map<fat::DirectoryEntry*, AppLoadInfo>* g_app_loads;
 
 class Terminal {
 public:

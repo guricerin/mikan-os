@@ -14,6 +14,8 @@ void LoadGDT(uint16_t limit, uint64_t offset);
 void SetCSSS(uint16_t cs, uint16_t ss);
 /// DS（データセグメントレジスタ）を設定
 void SetDSAll(uint16_t value);
+uint64_t GetCR0();
+void SetCR0(uint64_t value);
 /// 例外が発生したメモリアドレスを取得
 uint64_t GetCR2();
 /// CR3レジスタを設定し、自前の階層ページング構造が利用可能となる
@@ -39,4 +41,9 @@ void SyscallEntry(void);
 /// rsp : OS用スタックポインタ
 /// ret_val : CallApp()の戻り値となる値
 void ExitApp(uint64_t rsp, int32_t ret_val);
+/// 指定アドレスを含むTLBの行を無効化する
+/// TLB, Translation Lookaside Buffer:
+/// CPUに内蔵されている、仮想アドレスを物理アドレスに変換する処理を高速化する装置
+/// 一度解決した仮想アドレスを登録するので、階層ページング構造をたどる処理をスキップできる
+void InvalidateTLB(uint64_t addr);
 }

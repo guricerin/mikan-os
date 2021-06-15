@@ -116,8 +116,9 @@ union PageMapEntry {
 
 WithError<PageMapEntry*> NewPageMap();
 Error FreePageMap(PageMapEntry* table);
-Error SetupPageMaps(LinearAddress4Level addr, size_t num_4kpages);
+Error SetupPageMaps(LinearAddress4Level addr, size_t num_4kpages, bool writable = true);
 Error CleanPageMaps(LinearAddress4Level addr);
+Error CopyPageMaps(PageMapEntry* dest, PageMapEntry* src, int part, int start);
 /// デマンドページング : 初めはどのページに対してもフレームを割り当てないでおき、
 /// ページに初めてアクセスされたときにそのページだけフレームを割り当てる
 /// ページフォルトのエラーコードのビット定義 :
