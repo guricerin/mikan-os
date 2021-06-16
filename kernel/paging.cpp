@@ -281,7 +281,7 @@ Error HandlePageFault(uint64_t error_code, uint64_t causal_addr) {
     const bool user = (error_code >> 2) & 1;
     if (present && rw && user) { // ページは存在するが読み込み専用なのでユーザーモードの書き込みが失敗
         // コピーオンライト
-        CopyOnePage(causal_addr);
+        return CopyOnePage(causal_addr);
     } else if (present) { // ページは存在するがページレベルの権限違反により例外発生
         return MAKE_ERROR(Error::kAlreadyAllocated);
     }

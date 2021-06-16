@@ -505,7 +505,7 @@ Error Terminal::ExecuteFile(fat::DirectoryEntry& file_entry, char* command, char
     // [dpaging_end_, 0xffff ffff ffff e000) : メモリマップドファイル範囲。メモリを拡大するときは前方に進める。
     // [0xffff ffff ffff e000, 0xffff ffff ffff f000) : スタック領域
     // [0xffff ffff ffff f000, ] : コマンドライン引数領域
-    const uint64_t elf_next_page = (app_load.vaddr_end + 4096) & 0xfffffffffffff000; // 4KiB単位のアドレスに切り上げ
+    const uint64_t elf_next_page = (app_load.vaddr_end + 4095) & 0xfffffffffffff000; // 4KiB単位のアドレスに切り上げ
     task.SetDPagingBegin(elf_next_page);
     task.SetDPagingEnd(elf_next_page);
 
@@ -528,7 +528,7 @@ Error Terminal::ExecuteFile(fat::DirectoryEntry& file_entry, char* command, char
 
     // アプリ終了後、使用したメモリ領域を解放
     const uint64_t addr_first = 0xffff800000000000;
-    if (auto err = CleanPageMaps(LinearAddress4Level{0xffff800000000000})) {
+    if (auto err = CleanPageMaps(LinearAddress4Level{addr_first})) {
         return err;
     }
 

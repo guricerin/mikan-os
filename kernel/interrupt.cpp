@@ -10,6 +10,8 @@
 #include "task.hpp"
 #include "timer.hpp"
 
+#include "logger.hpp"
+
 std::array<InterruptDescriptor, 256> g_idt;
 
 void SetIDTEntry(InterruptDescriptor& desc,
@@ -80,15 +82,20 @@ namespace {
     __attribute__((interrupt)) void IntHandlerPF(InterruptFrame* frame, uint64_t error_code) {
         // 例外発生原因となったメモリアドレス
         uint64_t cr2 = GetCR2();
-        if (auto err = HandlePageFault(error_code, cr2); !err) {
+        auto err = HandlePageFault(error_code, cr2);
+        if (!err) {
             return;
+        } else {
+            char s[256];
+            sprintf(s, "PF: %s\n", err.Name());
+            Log(LogLevel::kError, s);
         }
 
         KillApp(frame);
         PrintFrame(frame, "#PF");
         WriteString(*g_screen_writer, {500, 16 * 4}, "ERR", {0, 0, 0});
         PrintHex(error_code, 16, {500 + 8 * 4, 16 * 4});
-        // カーネルをパニックさせる
+        // カーネルを停止させる
         while (true) __asm__("hlt");
     }
 
