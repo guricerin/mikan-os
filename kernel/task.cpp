@@ -78,7 +78,7 @@ std::optional<Message> Task::ReceiveMessage() {
     return msg;
 }
 
-std::vector<std::unique_ptr<IFileDescriptor>>& Task::Files() {
+std::vector<std::shared_ptr<IFileDescriptor>>& Task::Files() {
     return files_;
 }
 

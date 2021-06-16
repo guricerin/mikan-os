@@ -14,6 +14,7 @@
 
 /// UTF-8 :
 /// コードポイントの先頭1byte（の連続する1の個数）で1文字のバイト数を判断させる
+/// 先頭が0ならASCii文字
 /// ASCii文字のコードポイントなら、UTF-32のそれと同一
 
 void WriteAscii(PixelWriter& writer, Vector2D<int> pos, char c, const PixelColor& color);

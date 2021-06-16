@@ -55,7 +55,7 @@ public:
     void SendMessage(const Message& msg);
     /// メッセージを取得
     std::optional<Message> ReceiveMessage();
-    std::vector<std::unique_ptr<IFileDescriptor>>& Files();
+    std::vector<std::shared_ptr<IFileDescriptor>>& Files();
     uint64_t DPagingBegin() const;
     void SetDPagingBegin(uint64_t v);
     uint64_t DPagingEnd() const;
@@ -81,7 +81,7 @@ private:
     bool running_{false};
     /// ファイルディスクリプタをタスク毎に持たせる
     /// -> 番号が他のタスクとだぶっても大丈夫
-    std::vector<std::unique_ptr<IFileDescriptor>> files_{};
+    std::vector<std::shared_ptr<IFileDescriptor>> files_{};
     /// デマンドページングの仮想アドレス範囲
     uint64_t dpaging_begin_{0}, dpaging_end_{0};
     /// メモリマップドファイルに利用される仮想アドレス範囲

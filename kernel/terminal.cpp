@@ -159,7 +159,7 @@ namespace {
     }
 
     /// 指定ディレクトリの内容を一覧表示
-    void ListAllEntries(Terminal* term, uint32_t dir_cluster) {
+    void ListAllEntries(IFileDescriptor& fd, uint32_t dir_cluster) {
         const auto kEntriesPerCluster = fat::g_bytes_per_cluster / sizeof(fat::DirectoryEntry);
 
         while (dir_cluster != fat::kEndOfClusterchain) {
@@ -176,8 +176,7 @@ namespace {
 
                 char name[13];
                 fat::FormatName(dir[i], name);
-                term->Print(name);
-                term->Print("\n");
+                PrintFD(fd, "%s\n", name);
             }
 
             dir_cluster = fat::NextCluster(dir_cluster);
@@ -236,7 +235,12 @@ namespace {
 
 std::map<fat::DirectoryEntry*, AppLoadInfo>* g_app_loads;
 
-Terminal::Terminal(uint64_t task_id, bool show_window) : task_id_{task_id}, show_window_{show_window} {
+Terminal::Terminal(Task& task, bool show_window) : task_{task}, show_window_{show_window} {
+    // 標準入出力をターミナルに接続
+    for (int i = 0; i < files_.size(); i++) {
+        files_[i] = std::make_shared<TerminalFileDescriptor>(*this);
+    }
+
     if (show_window) {
         window_ = std::make_shared<TopLevelWindow>(
             kColumns * 8 + 8 + TopLevelWindow::kMarginX,
@@ -344,71 +348,89 @@ void Terminal::Scroll1() {
 void Terminal::ExecuteLine() {
     char* command = &linebuf_[0];
     char* first_arg = strchr(&linebuf_[0], ' ');
+    char* redir_char = strchr(&linebuf_[0], '>');
     if (first_arg) {
         // コマンド名と引数をスペースで分離
         *first_arg = 0;
         first_arg++;
     }
 
+    auto original_stdout = files_[1];
+
+    // リダイレクト処理
+    if (redir_char) {
+        *redir_char = 0;
+        char* redir_dest = &redir_char[1];
+        while (isspace(*redir_dest)) {
+            redir_dest++;
+        }
+
+        auto [file, post_slash] = fat::FindFile(redir_dest);
+        if (file == nullptr) { // リダイレクト先がなければ新規作成
+            auto [new_file, err] = fat::CreateFile(redir_dest);
+            if (err) {
+                PrintFD(*files_[2], "failed to create a redirect file: %s\n", err.Name());
+                return;
+            }
+            file = new_file;
+        } else if (file->attr == fat::Attribute::kDirectory || post_slash) {
+            PrintFD(*files_[2], "cannot redirect to a directory\n");
+            return;
+        }
+        // 標準出力先を指定ファイルに変更
+        files_[1] = std::make_shared<fat::FileDescriptor>(*file);
+    }
+
     if (strcmp(command, "echo") == 0) {
         if (first_arg) {
-            Print(first_arg);
+            PrintFD(*files_[1], "%s", first_arg);
         }
-        Print("\n");
+        PrintFD(*files_[1], "\n");
     } else if (strcmp(command, "clear") == 0) {
         if (show_window_) {
             FillRectangle(*window_->InnerWriter(), {4, 4}, {8 * kColumns, 16 * kRows}, {0, 0, 0});
         }
         cursor_.y = 0;
     } else if (strcmp(command, "lspci") == 0) {
-        char s[64];
         for (int i = 0; i < pci::g_num_device; i++) {
             const auto& device = pci::g_devices[i];
             auto vendor_id = pci::ReadVendorId(device.bus, device.device, device.function);
-            sprintf(s, "%02x:%02x.%d vend=%04x head=%02x class=%02x.%02x.%02x\n",
+            PrintFD(*files_[1],
+                    "%02x:%02x.%d vend=%04x head=%02x class=%02x.%02x.%02x\n",
                     device.bus, device.device, device.function, vendor_id, device.header_type,
                     device.class_code.base, device.class_code.sub, device.class_code.interface);
-            Print(s);
         }
     } else if (strcmp(command, "ls") == 0) {
         if (first_arg[0] == '\0') { // 引数なし -> rootをls
-            ListAllEntries(this, fat::g_boot_volume_image->root_cluster);
+            ListAllEntries(*files_[1], fat::g_boot_volume_image->root_cluster);
         } else {
             auto [dir, post_slash] = fat::FindFile(first_arg);
             if (dir == nullptr) {
-                Print("No such file or directory: ");
-                Print(first_arg);
-                Print("\n");
+                PrintFD(*files_[2], "No such file or directory: %s\n", first_arg);
             } else if (dir->attr == fat::Attribute::kDirectory) {
-                ListAllEntries(this, dir->FirstCluster());
+                ListAllEntries(*files_[1], dir->FirstCluster());
             } else {
                 char name[13];
                 fat::FormatName(*dir, name);
                 if (post_slash) {
-                    Print(name);
-                    Print(" is not a directory\n");
+                    PrintFD(*files_[2], "%s is not a directory\n", name);
                 } else {
-                    Print(name);
-                    Print("\n");
+                    PrintFD(*files_[1], "%s\n", name);
                 }
             }
         }
     } else if (strcmp(command, "cat") == 0) {
-        char s[64];
-
         // ルートから検索
         auto [file_entry, post_slash] = fat::FindFile(first_arg);
         if (!file_entry) { // エントリが見つからない
-            sprintf(s, "no such file: %s\n", first_arg);
-            Print(s);
+            PrintFD(*files_[2], "no such file: %s\n", first_arg);
         } else if (file_entry->attr != fat::Attribute::kDirectory && post_slash) { // ディレクトリでないにも関わらず、末尾にスラッシュがある
             char name[13];
             fat::FormatName(*file_entry, name);
-            Print(name);
-            Print(" is not a directory\n");
+            PrintFD(*files_[2], "%s is not a directory\n", name);
         } else { // ファイルが見つかった
             fat::FileDescriptor fd{*file_entry};
-            char u8buf[4];
+            char u8buf[5];
             DrawCursor(false);
 
             while (true) {
@@ -419,9 +441,8 @@ void Terminal::ExecuteLine() {
                 if (u8_remain > 0 && fd.Read(&u8buf[1], u8_remain) != u8_remain) {
                     break;
                 }
-
-                const auto [u32, u8_next] = ConvertUTF8to32(u8buf);
-                Print(u32 ? u32 : U'□'); // 失敗したら豆腐を表示
+                u8buf[u8_remain + 1] = 0;
+                PrintFD(*files_[1], "%s", u8buf);
             }
 
             DrawCursor(true);
@@ -434,32 +455,27 @@ void Terminal::ExecuteLine() {
     } else if (strcmp(command, "memstat") == 0) { // メモリ使用量を表示
         const auto p_stat = g_memory_manager->Stat();
 
-        char s[64];
-        sprintf(s, "Phys used : %lu frames (%llu MiB)\n",
+        PrintFD(*files_[1], "Phys used : %lu frames (%llu MiB)\n",
                 p_stat.allocated_frames,
                 p_stat.allocated_frames * kBytesPerFrame / 1024 / 1024);
-        Print(s);
-        sprintf(s, "Phys total : %lu frames (%llu MiB)\n",
+        PrintFD(*files_[1], "Phys total : %lu frames (%llu MiB)\n",
                 p_stat.total_frames,
                 p_stat.total_frames * kBytesPerFrame / 1024 / 1024);
-        Print(s);
     } else if (command[0] != 0) {
         auto [file_entry, post_slash] = fat::FindFile(command);
         if (!file_entry) { // エントリが見つからない
-            Print("no such command: ");
-            Print(command);
-            Print("\n");
+            PrintFD(*files_[2], "no such command: %s\n", command);
         } else if (file_entry->attr != fat::Attribute::kDirectory && post_slash) { // ディレクトリでないにも関わらず、末尾にスラッシュがある
             char name[13];
             fat::FormatName(*file_entry, name);
-            Print(name);
-            Print(" is not a directory\n");
+            PrintFD(*files_[2], "%s is not a directory\n", name);
         } else if (auto err = ExecuteFile(*file_entry, command, first_arg)) { // ファイルが見つかった
-            Print("failed to exec file: ");
-            Print(err.Name());
-            Print("\n");
+            PrintFD(*files_[2], "failed to exec file: %s\n", err.Name());
         }
     }
+
+    // 標準出力先を元に戻す
+    files_[1] = original_stdout;
 }
 
 Error Terminal::ExecuteFile(fat::DirectoryEntry& file_entry, char* command, char* first_arg) {
@@ -500,7 +516,7 @@ Error Terminal::ExecuteFile(fat::DirectoryEntry& file_entry, char* command, char
 
     // fd=0,1,2に標準入力、標準出力、標準エラー出力を設定
     for (int i = 0; i < 3; i++) {
-        task.Files().push_back(std::make_unique<TerminalFileDescriptor>(task, *this));
+        task.Files().push_back(files_[i]);
     }
 
     // デマンドページングのアドレス範囲を初期化
@@ -593,7 +609,7 @@ void Terminal::Print(const char* s, std::optional<size_t> len) {
     Rectangle<int> draw_area{draw_pos, draw_size};
 
     // 画面を再描画
-    Message msg = MakeLayerMessage(task_id_, LayerID(), LayerOperation::DrawArea, draw_area);
+    Message msg = MakeLayerMessage(task_.ID(), LayerID(), LayerOperation::DrawArea, draw_area);
     __asm__("cli");
     g_task_manager->SendMessage(kMainTaskID, msg);
     __asm__("sti");
@@ -633,7 +649,7 @@ void TaskTerminal(uint64_t task_id, int64_t data) {
     // グローバル変数を扱う際は割り込みを禁止しておくのが無難
     __asm__("cli");
     Task& task = g_task_manager->CurrentTask();
-    Terminal* terminal = new Terminal{task_id, show_window};
+    Terminal* terminal = new Terminal{task, show_window};
     if (show_window) {
         g_layer_manager->Move(terminal->LayerID(), {100, 200});
         g_layer_task_map->insert(std::make_pair(terminal->LayerID(), task_id));
@@ -703,7 +719,7 @@ void TaskTerminal(uint64_t task_id, int64_t data) {
     }
 }
 
-TerminalFileDescriptor::TerminalFileDescriptor(Task& task, Terminal& term) : task_{task}, term_{term} {
+TerminalFileDescriptor::TerminalFileDescriptor(Terminal& term) : term_{term} {
 }
 
 size_t TerminalFileDescriptor::Read(void* buf, size_t len) {
@@ -711,9 +727,9 @@ size_t TerminalFileDescriptor::Read(void* buf, size_t len) {
 
     while (true) {
         __asm__("cli");
-        auto msg = task_.ReceiveMessage();
+        auto msg = term_.UnderlyingTask().ReceiveMessage();
         if (!msg) {
-            task_.Sleep();
+            term_.UnderlyingTask().Sleep();
             continue;
         }
         __asm__("sti");

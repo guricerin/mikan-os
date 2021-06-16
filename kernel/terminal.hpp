@@ -2,8 +2,10 @@
 
 #pragma once
 
+#include <array>
 #include <deque>
 #include <map>
+#include <memory>
 #include <optional>
 
 #include "fat.hpp"
@@ -31,18 +33,19 @@ public:
     static const int kRows = 15, kColumns = 60;
     static const int kLineMax = 128;
 
-    Terminal(uint64_t task_id, bool show_window);
+    Terminal(Task& task, bool show_window);
     unsigned int LayerID() const { return layer_id_; }
     /// カーソルの点滅を切り替え、カーソルの描画領域を返す
     Rectangle<int> BlinkCursor();
     // キー入力を受付け、再描画すべき範囲を返す
     Rectangle<int> InputKey(uint8_t modifier, uint8_t keycode, char ascii);
     void Print(const char* s, std::optional<size_t> len = std::nullopt);
+    Task& UnderlyingTask() const { return task_; }
 
 private:
     std::shared_ptr<TopLevelWindow> window_;
     unsigned int layer_id_;
-    uint64_t task_id_;
+    Task& task_;
     /// カーソルの現在位置
     Vector2D<int> cursor_{0, 0};
     bool cursol_visible_{false};
@@ -56,6 +59,8 @@ private:
     int cmd_history_index_{-1};
     /// ターミナルウィンドウの表示/非表示
     bool show_window_;
+    /// 標準入出力ファイル
+    std::array<std::shared_ptr<IFileDescriptor>, 3> files_;
 
     void DrawCursor(bool visible);
     Vector2D<int> CalcCursorPos() const;
@@ -75,7 +80,7 @@ void TaskTerminal(uint64_t task_id, int64_t data);
 /// キーボードをファイルに見せかける
 class TerminalFileDescriptor : public IFileDescriptor {
 public:
-    explicit TerminalFileDescriptor(Task& task, Terminal& term);
+    explicit TerminalFileDescriptor(Terminal& term);
     /// キーボード入力から1文字だけ読み取る（標準入力）
     size_t Read(void* buf, size_t len) override;
     /// ターミナルに出力する（標準出力）
@@ -84,6 +89,5 @@ public:
     size_t Load(void* buf, size_t len, size_t offset) override;
 
 private:
-    Task& task_;
     Terminal& term_;
 };

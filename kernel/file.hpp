@@ -1,5 +1,9 @@
 #pragma once
 
+#include <cstddef>
+
+#include "error.hpp"
+
 /// 文字列（orバイト列）を扱える何か
 class IFileDescriptor {
 public:
@@ -11,3 +15,6 @@ public:
     /// Load() reads file content without changing internal offset
     virtual size_t Load(void* buf, size_t len, size_t offset) = 0;
 };
+
+/// 指定ファイルディスクリプタに文字列を書き込む
+size_t PrintFD(IFileDescriptor& fd, const char* format, ...);
