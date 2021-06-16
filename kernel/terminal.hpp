@@ -65,7 +65,7 @@ private:
     void ExecuteLine();
     /// 実行可能ファイル（カーネル本体に組み込まれていないアプリ）を読み込んで実行
     Error ExecuteFile(fat::DirectoryEntry& file_entry, char* command, char* first_arg);
-    void Print(char c);
+    void Print(char32_t c);
     /// コマンド履歴を辿る
     Rectangle<int> HistoryUpDown(int direction);
 };

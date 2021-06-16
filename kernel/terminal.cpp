@@ -405,22 +405,23 @@ void Terminal::ExecuteLine() {
             Print(name);
             Print(" is not a directory\n");
         } else { // ファイルが見つかった
-            auto cluster = file_entry->FirstCluster();
-            auto remain_bytes = file_entry->file_size;
-
+            fat::FileDescriptor fd{*file_entry};
+            char u8buf[4];
             DrawCursor(false);
-            while (cluster != 0 && cluster != fat::kEndOfClusterchain) {
-                char* p = fat::GetSectorByCluster<char>(cluster);
 
-                int i = 0;
-                for (; i < fat::g_bytes_per_cluster && i < remain_bytes; i++) {
-                    Print(*p);
-                    p++;
+            while (true) {
+                if (fd.Read(&u8buf[0], 1) != 1) {
+                    break;
                 }
-                remain_bytes -= i;
-                // ファイルが複数クラスタにまたがっていても対応
-                cluster = fat::NextCluster(cluster);
+                const int u8_remain = CountUTF8Size(u8buf[0]) - 1;
+                if (u8_remain > 0 && fd.Read(&u8buf[1], u8_remain) != u8_remain) {
+                    break;
+                }
+
+                const auto [u32, u8_next] = ConvertUTF8to32(u8buf);
+                Print(u32 ? u32 : U'□'); // 失敗したら豆腐を表示
             }
+
             DrawCursor(true);
         }
     } else if (strcmp(command, "noterm") == 0) { // ex. noterm <command line>
@@ -535,20 +536,49 @@ Error Terminal::ExecuteFile(fat::DirectoryEntry& file_entry, char* command, char
     return FreePML4(task);
 }
 
+void Terminal::Print(char32_t c) {
+    if (!show_window_) {
+        return;
+    }
+
+    auto newline = [this]() {
+        cursor_.x = 0;
+        if (cursor_.y < kRows - 1) {
+            cursor_.y++;
+        } else {
+            Scroll1();
+        }
+    };
+
+    if (c == U'\n') { // UTF-32の改行文字
+        newline();
+    } else if (IsHankaku(c)) {
+        if (cursor_.x == kColumns) {
+            newline();
+        }
+        WriteUnicode(*window_->Writer(), CalcCursorPos(), c, {255, 255, 255});
+        cursor_.x++;
+    } else { // 全角
+        // 画面右端に到達したら改行
+        if (cursor_.x >= kColumns - 1) {
+            newline();
+        }
+        WriteUnicode(*window_->Writer(), CalcCursorPos(), c, {255, 255, 255});
+        cursor_.x += 2;
+    }
+}
+
 void Terminal::Print(const char* s, std::optional<size_t> len) {
     const auto cursor_before = CalcCursorPos();
     DrawCursor(false);
 
-    if (len) { // バイト数を指定する場合
-        for (size_t i = 0; i < *len; i++) {
-            Print(*s);
-            s++;
-        }
-    } else { // バイト数を指定しない場合
-        while (*s) {
-            Print(*s);
-            s++;
-        }
+    size_t i = 0;
+    const size_t len_ = len ? *len : std::numeric_limits<size_t>::max();
+
+    while (s[i] && i < len_) {
+        const auto [u32, bytes] = ConvertUTF8to32(&s[i]);
+        Print(u32);
+        i += bytes;
     }
 
     DrawCursor(true);
@@ -563,31 +593,6 @@ void Terminal::Print(const char* s, std::optional<size_t> len) {
     __asm__("cli");
     g_task_manager->SendMessage(kMainTaskID, msg);
     __asm__("sti");
-}
-
-void Terminal::Print(char c) {
-    auto newline = [this]() {
-        cursor_.x = 0;
-        if (cursor_.y < kRows - 1) {
-            cursor_.y++;
-        } else {
-            Scroll1();
-        }
-    };
-
-    if (c == '\n') {
-        newline();
-    } else {
-        if (show_window_) {
-            WriteAscii(*window_->Writer(), CalcCursorPos(), c, {255, 255, 255});
-        }
-        // 画面右端に到達したら改行
-        if (cursor_.x == kColumns - 1) {
-            newline();
-        } else {
-            cursor_.x++;
-        }
-    }
 }
 
 Rectangle<int> Terminal::HistoryUpDown(int direction) {

@@ -32,6 +32,7 @@ main() {
     if [ "${1:-}" = "run" ]; then  
         # ディスクイメージにappsディレクトリが作成され、アプリの実行ファイルが格納される
         export APPS_DIR=apps
+        export RESOURCE_DIR=resource
         MIKANOS_DIR=$PWD $HOME/osbook/devenv/run_mikanos.sh
     fi
 }
