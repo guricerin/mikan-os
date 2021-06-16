@@ -12,6 +12,8 @@
 #include "pci.hpp"
 #include "timer.hpp"
 
+#include "logger.hpp"
+
 namespace {
     /// 空白区切りのコマンドライン引数を配列（argbuf）に詰める
     WithError<int> MakeArgVector(char* command, char* first_arg, char** argv, int argv_len, char* argbuf, int argbuf_len) {
@@ -489,8 +491,10 @@ Error Terminal::ExecuteFile(fat::DirectoryEntry& file_entry, char* command, char
         return argc.error;
     }
 
-    LinearAddress4Level stack_frame_addr{0xffffffffffffe000};
-    if (auto err = SetupPageMaps(stack_frame_addr, 1)) {
+    // アプリ用スタック領域
+    const int stack_size = 8 * 4096; // 32KiB
+    LinearAddress4Level stack_frame_addr{0xffffffffffffe000 - stack_size};
+    if (auto err = SetupPageMaps(stack_frame_addr, stack_size / 4096)) {
         return err;
     }
 
@@ -510,14 +514,14 @@ Error Terminal::ExecuteFile(fat::DirectoryEntry& file_entry, char* command, char
     task.SetDPagingBegin(elf_next_page);
     task.SetDPagingEnd(elf_next_page);
 
-    task.SetFileMapEnd(0xffffffffffffe000);
+    task.SetFileMapEnd(stack_frame_addr.value);
 
     // エントリポイントのアドレスを取得し、実行
     int ret = CallApp(argc.value,
                       argv,
                       3 << 3 | 3,
                       app_load.entry,
-                      stack_frame_addr.value + 4096 - 8,
+                      stack_frame_addr.value + stack_size - 8,
                       &task.OSStackPointer()); // アプリ終了時に復帰するスタックポインタ
 
     task.Files().clear();

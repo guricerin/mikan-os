@@ -23,7 +23,8 @@ clean:
 	rm -rf *.o
 
 $(TARGET): $(OBJS) Makefile
-	ld.lld $(LDFLAGS) -o $(TARGET) $(OBJS) -lc -lc++ -lc++abi -lm
+	ld.lld $(LDFLAGS) -o $(TARGET) $(OBJS) -lc -lc++ -lc++abi -lm \
+	-lfreetype
 
 %.o: %.cpp Makefile
 	clang++ $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@

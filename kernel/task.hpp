@@ -40,7 +40,8 @@ class Task {
 public:
     /// 優先度。数字が大きいほど高い。
     static const int kDefaultLevel = 1;
-    static const size_t kDefaultStackBytes = 4096;
+    /// 32KiB
+    static const size_t kDefaultStackBytes = 8 * 4096;
 
     Task(uint64_t id);
     /// f : 実際に実行されるタスク（関数）

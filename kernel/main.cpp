@@ -133,6 +133,9 @@ extern "C" void KernelMainNewStack(const FrameBufferConfig& frame_buffer_config,
     // FATファイルシステム
     fat::Initialize(volume_image);
 
+    // フォント
+    InitializeFont();
+
     // デバイス
     InitializePCI();
 

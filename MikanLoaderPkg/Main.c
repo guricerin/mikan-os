@@ -383,9 +383,9 @@ EFI_STATUS EFIAPI UefiMain(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE* system_tab
         // ブロックデバイス : データ領域が固定の大きさを持つブロックに分割されている記憶装置（SSD, USBなど）
         EFI_BLOCK_IO_MEDIA* media = block_io->Media;
         UINTN volume_bytes = (UINTN)media->BlockSize * (media->LastBlock + 1);
-        // 上限は16MiB
-        if (volume_bytes > 16 * 1024 * 1024) {
-            volume_bytes = 16 * 1024 * 1024;
+        // 上限は32MiB
+        if (volume_bytes > 32 * 1024 * 1024) {
+            volume_bytes = 32 * 1024 * 1024;
         }
 
         Print(L"Reading %lu bytes (Present %d, BlockSize %u, LastBlock %u)\n",
