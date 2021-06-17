@@ -433,6 +433,8 @@ void Terminal::ExecuteLine() {
         subtask_id = subtask.InitContext(TaskTerminal, reinterpret_cast<int64_t>(term_desc))
                          .Wakeup()
                          .ID();
+        // パイプ処理の間は、各種イベントを送信先タスクに通知
+        (*g_layer_task_map)[layer_id_] = subtask_id;
     }
 
     if (strcmp(command, "echo") == 0) {
@@ -540,6 +542,8 @@ void Terminal::ExecuteLine() {
         __asm__("cli");
         // 送信元タスクが送信先タスクの終了を待機
         auto [ec, err] = g_task_manager->WaitFinish(subtask_id);
+        // イベント通知先の変更を解除
+        (*g_layer_task_map)[layer_id_] = task_.ID();
         __asm__("sti");
         if (err) {
             Log(kWarn, "failed to wait finish: %s\n", err.Name());
