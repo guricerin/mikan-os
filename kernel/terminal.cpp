@@ -235,13 +235,21 @@ namespace {
 
 std::map<fat::DirectoryEntry*, AppLoadInfo>* g_app_loads;
 
-Terminal::Terminal(Task& task, bool show_window) : task_{task}, show_window_{show_window} {
-    // 標準入出力をターミナルに接続
-    for (int i = 0; i < files_.size(); i++) {
-        files_[i] = std::make_shared<TerminalFileDescriptor>(*this);
+Terminal::Terminal(Task& task, const TerminalDescriptor* term_desc) : task_{task} {
+    if (term_desc) {
+        show_window_ = term_desc->show_window;
+        for (int i = 0; i < files_.size(); i++) {
+            files_[i] = term_desc->files[i];
+        }
+    } else { // 最初の起動やF2キーでの起動の場合
+        show_window_ = true;
+        for (int i = 0; i < files_.size(); i++) {
+            // 標準入出力をターミナルに接続
+            files_[i] = std::make_shared<TerminalFileDescriptor>(*this);
+        }
     }
 
-    if (show_window) {
+    if (show_window_) {
         window_ = std::make_shared<TopLevelWindow>(
             kColumns * 8 + 8 + TopLevelWindow::kMarginX,
             kRows * 16 + 8 + TopLevelWindow::kMarginY,
@@ -349,6 +357,7 @@ void Terminal::ExecuteLine() {
     char* command = &linebuf_[0];
     char* first_arg = strchr(&linebuf_[0], ' ');
     char* redir_char = strchr(&linebuf_[0], '>');
+    char* pipe_char = strchr(&linebuf_[0], '|');
     if (first_arg) {
         // コマンド名と引数をスペースで分離
         *first_arg = 0;
@@ -380,6 +389,28 @@ void Terminal::ExecuteLine() {
         }
         // 標準出力先を指定ファイルに変更
         files_[1] = std::make_shared<fat::FileDescriptor>(*file);
+    }
+
+    std::shared_ptr<PipeDescriptor> pipe_fd;
+    uint64_t subtask_id = 0;
+
+    // パイプ処理
+    if (pipe_char) {
+        *pipe_char = 0;
+        char* subcommand = &pipe_char[1]; // パイプ右側のコマンド（受信側）
+        while (isspace(*subcommand)) {
+            subcommand++;
+        }
+
+        auto& subtask = g_task_manager->NewTask();
+        pipe_fd = std::make_shared<PipeDescriptor>(subtask);
+        // 送信先タスクの標準入出力を付け替える
+        auto term_desc = new TerminalDescriptor{subcommand, true, false, {pipe_fd, files_[1], files_[2]}};
+        // 現在のターミナル（送信元）の標準出力をパイプに接続
+        files_[1] = pipe_fd;
+        subtask_id = subtask.InitContext(TaskTerminal, reinterpret_cast<int64_t>(term_desc))
+                         .Wakeup()
+                         .ID();
     }
 
     if (strcmp(command, "echo") == 0) {
@@ -457,9 +488,10 @@ void Terminal::ExecuteLine() {
             DrawCursor(true);
         }
     } else if (strcmp(command, "noterm") == 0) { // ex. noterm <command line>
+        auto term_desc = new TerminalDescriptor{first_arg, true, false, files_};
         // 指定したコマンドラインを、画面非表示の新規ターミナル上で実行させる
         g_task_manager->NewTask()
-            .InitContext(TaskTerminal, reinterpret_cast<int64_t>(first_arg))
+            .InitContext(TaskTerminal, reinterpret_cast<int64_t>(term_desc))
             .Wakeup();
     } else if (strcmp(command, "memstat") == 0) { // メモリ使用量を表示
         const auto p_stat = g_memory_manager->Stat();
@@ -489,6 +521,18 @@ void Terminal::ExecuteLine() {
                 exit_code = ec;
             }
         }
+    }
+
+    if (pipe_fd) {
+        pipe_fd->FinishWrite(); // データ送信の終了を受信側に伝える
+        __asm__("cli");
+        // 送信元タスクが送信先タスクの終了を待機
+        auto [ec, err] = g_task_manager->WaitFinish(subtask_id);
+        __asm__("sti");
+        if (err) {
+            Log(kWarn, "failed to wait finish: %s\n", err.Name());
+        }
+        exit_code = ec;
     }
 
     last_exit_code_ = exit_code;
@@ -656,14 +700,16 @@ Rectangle<int> Terminal::HistoryUpDown(int direction) {
 }
 
 void TaskTerminal(uint64_t task_id, int64_t data) {
-    // notermコマンドで起動していたら、command_lineがnullptrではなくなる
-    const char* command_line = reinterpret_cast<char*>(data);
-    const bool show_window = command_line == nullptr;
+    const auto term_desc = reinterpret_cast<TerminalDescriptor*>(data);
+    bool show_window = true;
+    if (term_desc) {
+        show_window = term_desc->show_window;
+    }
 
     // グローバル変数を扱う際は割り込みを禁止しておくのが無難
     __asm__("cli");
     Task& task = g_task_manager->CurrentTask();
-    Terminal* terminal = new Terminal{task, show_window};
+    Terminal* terminal = new Terminal{task, term_desc};
     if (show_window) {
         g_layer_manager->Move(terminal->LayerID(), {100, 200});
         g_layer_task_map->insert(std::make_pair(terminal->LayerID(), task_id));
@@ -671,12 +717,19 @@ void TaskTerminal(uint64_t task_id, int64_t data) {
     }
     __asm__("sti");
 
-    if (command_line) {
+    if (term_desc && !term_desc->command_line.empty()) {
         // 非表示ターミナルにコマンドラインを自動入力
-        for (int i = 0; command_line[i] != '\0'; i++) {
-            terminal->InputKey(0, 0, command_line[i]);
+        for (int i = 0; i < term_desc->command_line.length(); i++) {
+            terminal->InputKey(0, 0, term_desc->command_line[i]);
         }
         terminal->InputKey(0, 0, '\n');
+    }
+
+    if (term_desc && term_desc->exit_after_command) { // タスクを終了させる
+        delete term_desc;
+        __asm__("cli");
+        g_task_manager->Finish(terminal->LastExitCode());
+        __asm__("sti");
     }
 
     auto add_blink_timer = [task_id](unsigned long t) {
@@ -780,4 +833,69 @@ size_t TerminalFileDescriptor::Write(const void* buf, size_t len) {
 
 size_t TerminalFileDescriptor::Load(void* buf, size_t len, size_t offset) {
     return 0;
+}
+
+PipeDescriptor::PipeDescriptor(Task& task) : task_{task} {}
+
+size_t PipeDescriptor::Read(void* buf, size_t len) {
+    if (len_ > 0) {
+        const size_t copy_bytes = std::min(len_, len);
+        memcpy(buf, data_, copy_bytes);
+        len_ -= copy_bytes;
+        memmove(data_, &data_[copy_bytes], len_);
+        return copy_bytes;
+    }
+
+    if (closed_) {
+        return 0;
+    }
+
+    while (true) {
+        __asm__("cli");
+        auto msg = task_.ReceiveMessage();
+        if (!msg) {
+            task_.Sleep();
+            continue;
+        }
+        __asm__("sti");
+
+        if (msg->type != Message::kPipe) {
+            continue;
+        }
+
+        if (msg->arg.pipe.len == 0) { // 終了
+            closed_ = true;
+            return 0;
+        }
+
+        const size_t copy_bytes = std::min<size_t>(msg->arg.pipe.len, len);
+        memcpy(buf, msg->arg.pipe.data, copy_bytes);
+        len_ = msg->arg.pipe.len - copy_bytes;
+        memcpy(data_, &msg->arg.pipe.data[copy_bytes], len_);
+        return copy_bytes;
+    }
+}
+
+size_t PipeDescriptor::Write(const void* buf, size_t len) {
+    auto bufc = reinterpret_cast<const char*>(buf);
+    Message msg{Message::kPipe};
+    size_t sent_bytes = 0;
+    while (sent_bytes < len) {
+        msg.arg.pipe.len = std::min(len - sent_bytes, sizeof(msg.arg.pipe.data));
+        memcpy(msg.arg.pipe.data, &bufc[sent_bytes], msg.arg.pipe.len);
+        sent_bytes += msg.arg.pipe.len;
+        __asm__("cli");
+        // データ送信先に割り込み通知
+        task_.SendMessage(msg);
+        __asm__("sti");
+    }
+    return len;
+}
+
+void PipeDescriptor::FinishWrite() {
+    Message msg{Message::kPipe};
+    msg.arg.pipe.len = 0;
+    __asm__("cli");
+    task_.SendMessage(msg);
+    __asm__("sti");
 }

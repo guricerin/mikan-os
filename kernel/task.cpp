@@ -219,6 +219,47 @@ Task& TaskManager::CurrentTask() {
     return *running_[current_level_].front();
 }
 
+void TaskManager::Finish(int exit_code) {
+    // Finish()をコールしたタスクは実行可能状態ではなくなる
+    Task* current_task = RotateCurrentRunQueue(true);
+
+    // 削除する前にidを保存
+    const auto task_id = current_task->ID();
+    auto it = std::find_if(
+        tasks_.begin(), tasks_.end(),
+        [current_task](const auto& t) {
+            return t.get() == current_task;
+        });
+    tasks_.erase(it);
+
+    finish_tasks_[task_id] = exit_code;
+    // 削除したタスクの終了を待機しているタスクを起こす
+    if (auto it = finish_waiter_.find(task_id); it != finish_waiter_.end()) {
+        auto waiter = it->second;
+        finish_waiter_.erase(it);
+        Wakeup(waiter);
+    }
+
+    // 次のタスクに実行を移す
+    RestoreContext(&CurrentTask().Context());
+}
+
+WithError<int> TaskManager::WaitFinish(uint64_t task_id) {
+    int exit_code;
+    // WaitFinish()をコールしたタスク
+    Task* current_task = &CurrentTask();
+    while (true) { // 指定タスクの終了を待機
+        if (auto it = finish_tasks_.find(task_id); it != finish_tasks_.end()) {
+            exit_code = it->second;
+            finish_tasks_.erase(it);
+            break;
+        }
+        finish_waiter_[task_id] = current_task;
+        Sleep(current_task);
+    }
+    return {exit_code, MAKE_ERROR(Error::kSuccess)};
+}
+
 void TaskManager::ChangeLevelRunning(Task* task, int level) {
     // 実行レベル変更なし
     if (level < 0 || level == task->Level()) {

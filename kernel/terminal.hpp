@@ -25,6 +25,17 @@ struct AppLoadInfo {
     PageMapEntry* pml4;
 };
 
+struct TerminalDescriptor {
+    /// コマンドライン引数
+    std::string command_line;
+    /// コマンドを自動実行後にターミナルを終了 -> true
+    bool exit_after_command;
+    /// ウィンドウを生成する -> true
+    bool show_window;
+    /// 標準入出力
+    std::array<std::shared_ptr<IFileDescriptor>, 3> files;
+};
+
 /// ロード済みアプリの一覧
 extern std::map<fat::DirectoryEntry*, AppLoadInfo>* g_app_loads;
 
@@ -33,7 +44,7 @@ public:
     static const int kRows = 15, kColumns = 60;
     static const int kLineMax = 128;
 
-    Terminal(Task& task, bool show_window);
+    Terminal(Task& task, const TerminalDescriptor* term_desc);
     unsigned int LayerID() const { return layer_id_; }
     /// カーソルの点滅を切り替え、カーソルの描画領域を返す
     Rectangle<int> BlinkCursor();
@@ -41,6 +52,7 @@ public:
     Rectangle<int> InputKey(uint8_t modifier, uint8_t keycode, char ascii);
     void Print(const char* s, std::optional<size_t> len = std::nullopt);
     Task& UnderlyingTask() const { return task_; }
+    int LastExitCode() const { return last_exit_code_; }
 
 private:
     std::shared_ptr<TopLevelWindow> window_;
@@ -93,4 +105,27 @@ public:
 
 private:
     Terminal& term_;
+};
+
+/// パイプそのもの
+class PipeDescriptor : public IFileDescriptor {
+public:
+    explicit PipeDescriptor(Task& task);
+    /// 送信先にメッセージキューからデータを受信させる
+    size_t Read(void* buf, size_t len) override;
+    /// 送信先にデータ送信
+    size_t Write(const void* buf, size_t len) override;
+    size_t Size() const override { return 0; }
+    size_t Load(void* buf, size_t len, size_t offset) override { return 0; }
+
+    /// パイプは普通のファイルと違って末尾がないため、データがこれ以上存在しないことを伝える別の方法がこれ
+    void FinishWrite();
+
+private:
+    /// データ送信先のタスク（パイプ右側のコマンド）
+    Task& task_;
+    char data_[16];
+    size_t len_{0};
+    /// 送信するデータがもうない -> true
+    bool closed_{false};
 };

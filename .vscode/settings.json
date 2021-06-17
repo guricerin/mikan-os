@@ -10,6 +10,12 @@
         "**/*.elf": true,
     },
     "files.associations": {
-        "new": "cpp"
+        "new": "cpp",
+        "*.tcc": "cpp",
+        "numeric": "cpp",
+        "ostream": "cpp",
+        "sstream": "cpp",
+        "memory_resource": "cpp",
+        "vector": "cpp"
     },
 }

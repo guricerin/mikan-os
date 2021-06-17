@@ -24,6 +24,7 @@ struct Message {
         kMouseMove,
         kMouseButton,
         kWindowActive,
+        kPipe,
     } type;
 
     /// メッセージ送信元のタスクID
@@ -79,5 +80,11 @@ struct Message {
             /// 1: activate, 0: deactivate
             int activate;
         } window_active;
+
+        /// パイプによる送信データ
+        struct {
+            char data[16];
+            uint8_t len;
+        } pipe;
     } arg;
 };

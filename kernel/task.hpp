@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <deque>
+#include <map>
 #include <optional>
 #include <vector>
 
@@ -119,6 +120,10 @@ public:
     Error SendMessage(uint64_t id, const Message& msg);
     /// 現在実行中のタスク
     Task& CurrentTask();
+    /// 現在実行中のタスクを終了し、finish_tasks_に終了コードを登録
+    void Finish(int exit_code);
+    /// 指定タスクの終了コードを得る
+    WithError<int> WaitFinish(uint64_t task_id);
 
 private:
     /// タスク一覧
@@ -134,9 +139,17 @@ private:
     int current_level_{kMaxLevel};
     /// 次回のタスク切替え時に現在の実行レベルを変更 : true
     bool level_changed_{false};
+    /// 終了されたタスク一覧
+    /// key: ID of a finished task
+    /// value: exit code
+    std::map<uint64_t, int> finish_tasks_{};
+    /// あるタスクの終了を待機しているタスク一覧
+    /// key: ID of a finished task
+    /// value: a waiter task
+    std::map<uint64_t, Task*> finish_waiter_{};
 
     void ChangeLevelRunning(Task* task, int level);
-    /// ランキューの戦闘要素を末尾に移動
+    /// ランキューの先頭要素を末尾に移動
     Task* RotateCurrentRunQueue(bool current_sleep);
 };
 
