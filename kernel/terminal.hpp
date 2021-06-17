@@ -61,6 +61,8 @@ private:
     bool show_window_;
     /// 標準入出力ファイル
     std::array<std::shared_ptr<IFileDescriptor>, 3> files_;
+    /// 直前のアプリの終了コード
+    int last_exit_code_{0};
 
     void DrawCursor(bool visible);
     Vector2D<int> CalcCursorPos() const;
@@ -69,7 +71,8 @@ private:
     /// コマンド実行
     void ExecuteLine();
     /// 実行可能ファイル（カーネル本体に組み込まれていないアプリ）を読み込んで実行
-    Error ExecuteFile(fat::DirectoryEntry& file_entry, char* command, char* first_arg);
+    /// return : アプリの終了コード
+    WithError<int> ExecuteFile(fat::DirectoryEntry& file_entry, char* command, char* first_arg);
     void Print(char32_t c);
     /// コマンド履歴を辿る
     Rectangle<int> HistoryUpDown(int direction);

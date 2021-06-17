@@ -356,6 +356,7 @@ void Terminal::ExecuteLine() {
     }
 
     auto original_stdout = files_[1];
+    int exit_code = 0;
 
     // リダイレクト処理
     if (redir_char) {
@@ -382,7 +383,11 @@ void Terminal::ExecuteLine() {
     }
 
     if (strcmp(command, "echo") == 0) {
-        if (first_arg) {
+        if (first_arg && first_arg[0] == '$') { // $? で終了コード表示
+            if (strcmp(&first_arg[1], "?") == 0) {
+                PrintFD(*files_[1], "%d", last_exit_code_);
+            }
+        } else if (first_arg) {
             PrintFD(*files_[1], "%s", first_arg);
         }
         PrintFD(*files_[1], "\n");
@@ -407,6 +412,7 @@ void Terminal::ExecuteLine() {
             auto [dir, post_slash] = fat::FindFile(first_arg);
             if (dir == nullptr) {
                 PrintFD(*files_[2], "No such file or directory: %s\n", first_arg);
+                exit_code = 1;
             } else if (dir->attr == fat::Attribute::kDirectory) {
                 ListAllEntries(*files_[1], dir->FirstCluster());
             } else {
@@ -414,6 +420,7 @@ void Terminal::ExecuteLine() {
                 fat::FormatName(*dir, name);
                 if (post_slash) {
                     PrintFD(*files_[2], "%s is not a directory\n", name);
+                    exit_code = 1;
                 } else {
                     PrintFD(*files_[1], "%s\n", name);
                 }
@@ -424,10 +431,12 @@ void Terminal::ExecuteLine() {
         auto [file_entry, post_slash] = fat::FindFile(first_arg);
         if (!file_entry) { // エントリが見つからない
             PrintFD(*files_[2], "no such file: %s\n", first_arg);
+            exit_code = 1;
         } else if (file_entry->attr != fat::Attribute::kDirectory && post_slash) { // ディレクトリでないにも関わらず、末尾にスラッシュがある
             char name[13];
             fat::FormatName(*file_entry, name);
             PrintFD(*files_[2], "%s is not a directory\n", name);
+            exit_code = 1;
         } else { // ファイルが見つかった
             fat::FileDescriptor fd{*file_entry};
             char u8buf[5];
@@ -465,20 +474,29 @@ void Terminal::ExecuteLine() {
         auto [file_entry, post_slash] = fat::FindFile(command);
         if (!file_entry) { // エントリが見つからない
             PrintFD(*files_[2], "no such command: %s\n", command);
+            exit_code = 1;
         } else if (file_entry->attr != fat::Attribute::kDirectory && post_slash) { // ディレクトリでないにも関わらず、末尾にスラッシュがある
             char name[13];
             fat::FormatName(*file_entry, name);
             PrintFD(*files_[2], "%s is not a directory\n", name);
-        } else if (auto err = ExecuteFile(*file_entry, command, first_arg)) { // ファイルが見つかった
-            PrintFD(*files_[2], "failed to exec file: %s\n", err.Name());
+            exit_code = 1;
+        } else { // ファイルが見つかった
+            auto [ec, err] = ExecuteFile(*file_entry, command, first_arg);
+            if (err) {
+                PrintFD(*files_[2], "failed to exec file: %s\n", err.Name());
+                exit_code = -ec;
+            } else {
+                exit_code = ec;
+            }
         }
     }
 
+    last_exit_code_ = exit_code;
     // 標準出力先を元に戻す
     files_[1] = original_stdout;
 }
 
-Error Terminal::ExecuteFile(fat::DirectoryEntry& file_entry, char* command, char* first_arg) {
+WithError<int> Terminal::ExecuteFile(fat::DirectoryEntry& file_entry, char* command, char* first_arg) {
     // アプリ独自の仮想アドレスに実行可能ファイルをロードするため、事前にタスク固有の階層ページング構造を設定
     __asm__("cli");
     auto& task = g_task_manager->CurrentTask();
@@ -486,14 +504,14 @@ Error Terminal::ExecuteFile(fat::DirectoryEntry& file_entry, char* command, char
 
     auto [app_load, err] = LoadApp(file_entry, task);
     if (err) {
-        return err;
+        return {0, err};
     }
 
     // コマンドライン引数を取得
     // アプリ用のページにargvを構築
     LinearAddress4Level args_frame_addr{0xfffffffffffff000};
     if (auto err = SetupPageMaps(args_frame_addr, 1)) {
-        return err;
+        return {0, err};
     }
     // new演算子はsbrk()（OS用のアドレス空間に存在するメモリ領域を使う）を呼び出してしまうので、使用しない
     // アプリ用の領域（userビットを1としたページ）に用意する
@@ -504,14 +522,14 @@ Error Terminal::ExecuteFile(fat::DirectoryEntry& file_entry, char* command, char
     int argbuf_len = 4096 - sizeof(char**) * argv_len;
     auto argc = MakeArgVector(command, first_arg, argv, argv_len, argbuf, argbuf_len);
     if (argc.error) {
-        return argc.error;
+        return {0, argc.error};
     }
 
     // アプリ用スタック領域
     const int stack_size = 8 * 4096; // 32KiB
     LinearAddress4Level stack_frame_addr{0xffffffffffffe000 - stack_size};
     if (auto err = SetupPageMaps(stack_frame_addr, stack_size / 4096)) {
-        return err;
+        return {0, err};
     }
 
     // fd=0,1,2に標準入力、標準出力、標準エラー出力を設定
@@ -543,17 +561,13 @@ Error Terminal::ExecuteFile(fat::DirectoryEntry& file_entry, char* command, char
     task.Files().clear();
     task.FileMaps().clear();
 
-    char s[64];
-    sprintf(s, "app exited. ret = %d\n", ret);
-    Print(s);
-
     // アプリ終了後、使用したメモリ領域を解放
     const uint64_t addr_first = 0xffff800000000000;
     if (auto err = CleanPageMaps(LinearAddress4Level{addr_first})) {
-        return err;
+        return {ret, err};
     }
 
-    return FreePML4(task);
+    return {ret, FreePML4(task)};
 }
 
 void Terminal::Print(char32_t c) {
