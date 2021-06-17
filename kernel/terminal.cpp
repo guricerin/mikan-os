@@ -176,7 +176,7 @@ namespace {
 
                 char name[13];
                 fat::FormatName(dir[i], name);
-                PrintFD(fd, "%s\n", name);
+                PrintToFD(fd, "%s\n", name);
             }
 
             dir_cluster = fat::NextCluster(dir_cluster);
@@ -379,12 +379,12 @@ void Terminal::ExecuteLine() {
         if (file == nullptr) { // リダイレクト先がなければ新規作成
             auto [new_file, err] = fat::CreateFile(redir_dest);
             if (err) {
-                PrintFD(*files_[2], "failed to create a redirect file: %s\n", err.Name());
+                PrintToFD(*files_[2], "failed to create a redirect file: %s\n", err.Name());
                 return;
             }
             file = new_file;
         } else if (file->attr == fat::Attribute::kDirectory || post_slash) {
-            PrintFD(*files_[2], "cannot redirect to a directory\n");
+            PrintToFD(*files_[2], "cannot redirect to a directory\n");
             return;
         }
         // 標準出力先を指定ファイルに変更
@@ -416,12 +416,12 @@ void Terminal::ExecuteLine() {
     if (strcmp(command, "echo") == 0) {
         if (first_arg && first_arg[0] == '$') { // $? で終了コード表示
             if (strcmp(&first_arg[1], "?") == 0) {
-                PrintFD(*files_[1], "%d", last_exit_code_);
+                PrintToFD(*files_[1], "%d", last_exit_code_);
             }
         } else if (first_arg) {
-            PrintFD(*files_[1], "%s", first_arg);
+            PrintToFD(*files_[1], "%s", first_arg);
         }
-        PrintFD(*files_[1], "\n");
+        PrintToFD(*files_[1], "\n");
     } else if (strcmp(command, "clear") == 0) {
         if (show_window_) {
             FillRectangle(*window_->InnerWriter(), {4, 4}, {8 * kColumns, 16 * kRows}, {0, 0, 0});
@@ -431,10 +431,10 @@ void Terminal::ExecuteLine() {
         for (int i = 0; i < pci::g_num_device; i++) {
             const auto& device = pci::g_devices[i];
             auto vendor_id = pci::ReadVendorId(device.bus, device.device, device.function);
-            PrintFD(*files_[1],
-                    "%02x:%02x.%d vend=%04x head=%02x class=%02x.%02x.%02x\n",
-                    device.bus, device.device, device.function, vendor_id, device.header_type,
-                    device.class_code.base, device.class_code.sub, device.class_code.interface);
+            PrintToFD(*files_[1],
+                      "%02x:%02x.%d vend=%04x head=%02x class=%02x.%02x.%02x\n",
+                      device.bus, device.device, device.function, vendor_id, device.header_type,
+                      device.class_code.base, device.class_code.sub, device.class_code.interface);
         }
     } else if (strcmp(command, "ls") == 0) {
         if (first_arg[0] == '\0') { // 引数なし -> rootをls
@@ -442,7 +442,7 @@ void Terminal::ExecuteLine() {
         } else {
             auto [dir, post_slash] = fat::FindFile(first_arg);
             if (dir == nullptr) {
-                PrintFD(*files_[2], "No such file or directory: %s\n", first_arg);
+                PrintToFD(*files_[2], "No such file or directory: %s\n", first_arg);
                 exit_code = 1;
             } else if (dir->attr == fat::Attribute::kDirectory) {
                 ListAllEntries(*files_[1], dir->FirstCluster());
@@ -450,10 +450,10 @@ void Terminal::ExecuteLine() {
                 char name[13];
                 fat::FormatName(*dir, name);
                 if (post_slash) {
-                    PrintFD(*files_[2], "%s is not a directory\n", name);
+                    PrintToFD(*files_[2], "%s is not a directory\n", name);
                     exit_code = 1;
                 } else {
-                    PrintFD(*files_[1], "%s\n", name);
+                    PrintToFD(*files_[1], "%s\n", name);
                 }
             }
         }
@@ -461,28 +461,23 @@ void Terminal::ExecuteLine() {
         // ルートから検索
         auto [file_entry, post_slash] = fat::FindFile(first_arg);
         if (!file_entry) { // エントリが見つからない
-            PrintFD(*files_[2], "no such file: %s\n", first_arg);
+            PrintToFD(*files_[2], "no such file: %s\n", first_arg);
             exit_code = 1;
         } else if (file_entry->attr != fat::Attribute::kDirectory && post_slash) { // ディレクトリでないにも関わらず、末尾にスラッシュがある
             char name[13];
             fat::FormatName(*file_entry, name);
-            PrintFD(*files_[2], "%s is not a directory\n", name);
+            PrintToFD(*files_[2], "%s is not a directory\n", name);
             exit_code = 1;
         } else { // ファイルが見つかった
             fat::FileDescriptor fd{*file_entry};
-            char u8buf[5];
+            char u8buf[1024];
             DrawCursor(false);
 
             while (true) {
-                if (fd.Read(&u8buf[0], 1) != 1) {
+                if (ReadDelim(fd, '\n', u8buf, sizeof(u8buf)) == 0) { // 1行ずつ読む
                     break;
                 }
-                const int u8_remain = CountUTF8Size(u8buf[0]) - 1;
-                if (u8_remain > 0 && fd.Read(&u8buf[1], u8_remain) != u8_remain) {
-                    break;
-                }
-                u8buf[u8_remain + 1] = 0;
-                PrintFD(*files_[1], "%s", u8buf);
+                PrintToFD(*files_[1], "%s", u8buf);
             }
 
             DrawCursor(true);
@@ -496,26 +491,26 @@ void Terminal::ExecuteLine() {
     } else if (strcmp(command, "memstat") == 0) { // メモリ使用量を表示
         const auto p_stat = g_memory_manager->Stat();
 
-        PrintFD(*files_[1], "Phys used : %lu frames (%llu MiB)\n",
-                p_stat.allocated_frames,
-                p_stat.allocated_frames * kBytesPerFrame / 1024 / 1024);
-        PrintFD(*files_[1], "Phys total : %lu frames (%llu MiB)\n",
-                p_stat.total_frames,
-                p_stat.total_frames * kBytesPerFrame / 1024 / 1024);
+        PrintToFD(*files_[1], "Phys used : %lu frames (%llu MiB)\n",
+                  p_stat.allocated_frames,
+                  p_stat.allocated_frames * kBytesPerFrame / 1024 / 1024);
+        PrintToFD(*files_[1], "Phys total : %lu frames (%llu MiB)\n",
+                  p_stat.total_frames,
+                  p_stat.total_frames * kBytesPerFrame / 1024 / 1024);
     } else if (command[0] != 0) {
         auto [file_entry, post_slash] = fat::FindFile(command);
         if (!file_entry) { // エントリが見つからない
-            PrintFD(*files_[2], "no such command: %s\n", command);
+            PrintToFD(*files_[2], "no such command: %s\n", command);
             exit_code = 1;
         } else if (file_entry->attr != fat::Attribute::kDirectory && post_slash) { // ディレクトリでないにも関わらず、末尾にスラッシュがある
             char name[13];
             fat::FormatName(*file_entry, name);
-            PrintFD(*files_[2], "%s is not a directory\n", name);
+            PrintToFD(*files_[2], "%s is not a directory\n", name);
             exit_code = 1;
         } else { // ファイルが見つかった
             auto [ec, err] = ExecuteFile(*file_entry, command, first_arg);
             if (err) {
-                PrintFD(*files_[2], "failed to exec file: %s\n", err.Name());
+                PrintToFD(*files_[2], "failed to exec file: %s\n", err.Name());
                 exit_code = -ec;
             } else {
                 exit_code = ec;
@@ -673,6 +668,14 @@ void Terminal::Print(const char* s, std::optional<size_t> len) {
     __asm__("sti");
 }
 
+void Terminal::Redraw() {
+    Rectangle<int> draw_area{TopLevelWindow::kTopLeftMargin, window_->InnerSize()};
+    Message msg = MakeLayerMessage(task_.ID(), LayerID(), LayerOperation::DrawArea, draw_area);
+    __asm__("cli");
+    g_task_manager->SendMessage(kMainTaskID, msg);
+    __asm__("sti");
+}
+
 Rectangle<int> Terminal::HistoryUpDown(int direction) {
     if (direction == -1 && cmd_history_index_ >= 0) { // 最新に近づく
         cmd_history_index_--;
@@ -822,12 +825,14 @@ size_t TerminalFileDescriptor::Read(void* buf, size_t len) {
         // エコーバック:
         // キー入力結果を即座にターミナルに印字
         term_.Print(bufc, 1);
+        term_.Redraw();
         return 1;
     }
 }
 
 size_t TerminalFileDescriptor::Write(const void* buf, size_t len) {
     term_.Print(reinterpret_cast<const char*>(buf), len);
+    term_.Redraw(); // 文字列を表示するたびにターミナル画面全体を再描画
     return len;
 }
 

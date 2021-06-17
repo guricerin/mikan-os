@@ -53,6 +53,8 @@ public:
     void Print(const char* s, std::optional<size_t> len = std::nullopt);
     Task& UnderlyingTask() const { return task_; }
     int LastExitCode() const { return last_exit_code_; }
+    // ターミナル画面全体を再描画
+    void Redraw();
 
 private:
     std::shared_ptr<TopLevelWindow> window_;

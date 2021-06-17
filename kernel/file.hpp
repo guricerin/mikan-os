@@ -17,4 +17,6 @@ public:
 };
 
 /// 指定ファイルディスクリプタに文字列を書き込む
-size_t PrintFD(IFileDescriptor& fd, const char* format, ...);
+size_t PrintToFD(IFileDescriptor& fd, const char* format, ...);
+/// 指定文字に出会うまで1byteずつ読み取る
+size_t ReadDelim(IFileDescriptor& fd, char delim, char* buf, size_t len);
