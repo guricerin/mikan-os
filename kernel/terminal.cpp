@@ -383,7 +383,9 @@ void Terminal::ExecuteLine() {
     if (first_arg) {
         // コマンド名と引数をスペースで分離
         *first_arg = 0;
-        first_arg++;
+        do {
+            first_arg++;
+        } while (isspace(*first_arg));
     }
 
     auto original_stdout = files_[1];
@@ -482,23 +484,30 @@ void Terminal::ExecuteLine() {
             }
         }
     } else if (strcmp(command, "cat") == 0) {
-        // ルートから検索
-        auto [file_entry, post_slash] = fat::FindFile(first_arg);
-        if (!file_entry) { // エントリが見つからない
-            PrintToFD(*files_[2], "no such file: %s\n", first_arg);
-            exit_code = 1;
-        } else if (file_entry->attr != fat::Attribute::kDirectory && post_slash) { // ディレクトリでないにも関わらず、末尾にスラッシュがある
-            char name[13];
-            fat::FormatName(*file_entry, name);
-            PrintToFD(*files_[2], "%s is not a directory\n", name);
-            exit_code = 1;
-        } else { // ファイルが見つかった
-            fat::FileDescriptor fd{*file_entry};
+        std::shared_ptr<IFileDescriptor> fd;
+        if (!first_arg || first_arg[0] == '\0') { // ファイル名を省略したら標準入力を使う
+            fd = files_[0];
+        } else {
+            // ルートから検索
+            auto [file_entry, post_slash] = fat::FindFile(first_arg);
+            if (!file_entry) { // エントリが見つからない
+                PrintToFD(*files_[2], "no such file: %s\n", first_arg);
+                exit_code = 1;
+            } else if (file_entry->attr != fat::Attribute::kDirectory && post_slash) { // ディレクトリでないにも関わらず、末尾にスラッシュがある
+                char name[13];
+                fat::FormatName(*file_entry, name);
+                PrintToFD(*files_[2], "%s is not a directory\n", name);
+                exit_code = 1;
+            } else {
+                fd = std::make_shared<fat::FileDescriptor>(*file_entry);
+            }
+        }
+        if (fd) { // ファイルが見つかった
             char u8buf[1024];
             DrawCursor(false);
 
             while (true) {
-                if (ReadDelim(fd, '\n', u8buf, sizeof(u8buf)) == 0) { // 1行ずつ読む
+                if (ReadDelim(*fd, '\n', u8buf, sizeof(u8buf)) == 0) { // 1行ずつ読む
                     break;
                 }
                 PrintToFD(*files_[1], "%s", u8buf);
