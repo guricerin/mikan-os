@@ -231,6 +231,28 @@ namespace {
         auto err = CopyPageMaps(app_load.pml4, temp_pml4, 4, 256);
         return {app_load, err};
     }
+
+    /// アプリをappsディレクトリから探す（擬似的に /apps にパスを通す）
+    fat::DirectoryEntry* FindCommand(const char* command, unsigned long dir_cluster = 0) {
+        // ルート直下を探索
+        auto file_entry = fat::FindFile(command, dir_cluster);
+        if (file_entry.first != nullptr && (file_entry.first->attr == fat::Attribute::kDirectory || file_entry.second)) {
+            return nullptr;
+        } else if (file_entry.first) {
+            return file_entry.first;
+        }
+
+        if (dir_cluster != 0 || strchr(command, '/') != nullptr) {
+            return nullptr;
+        }
+
+        // /apps を探索
+        auto apps_entry = fat::FindFile("apps");
+        if (apps_entry.first == nullptr || apps_entry.first->attr != fat::Attribute::kDirectory) {
+            return nullptr;
+        }
+        return FindCommand(command, apps_entry.first->FirstCluster());
+    }
 } // namespace
 
 std::map<fat::DirectoryEntry*, AppLoadInfo>* g_app_loads;
@@ -498,14 +520,9 @@ void Terminal::ExecuteLine() {
                   p_stat.total_frames,
                   p_stat.total_frames * kBytesPerFrame / 1024 / 1024);
     } else if (command[0] != 0) {
-        auto [file_entry, post_slash] = fat::FindFile(command);
+        auto file_entry = FindCommand(command);
         if (!file_entry) { // エントリが見つからない
             PrintToFD(*files_[2], "no such command: %s\n", command);
-            exit_code = 1;
-        } else if (file_entry->attr != fat::Attribute::kDirectory && post_slash) { // ディレクトリでないにも関わらず、末尾にスラッシュがある
-            char name[13];
-            fat::FormatName(*file_entry, name);
-            PrintToFD(*files_[2], "%s is not a directory\n", name);
             exit_code = 1;
         } else { // ファイルが見つかった
             auto [ec, err] = ExecuteFile(*file_entry, command, first_arg);
