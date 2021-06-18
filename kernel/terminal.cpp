@@ -595,8 +595,8 @@ WithError<int> Terminal::ExecuteFile(fat::DirectoryEntry& file_entry, char* comm
     }
 
     // アプリ用スタック領域
-    const int stack_size = 8 * 4096; // 32KiB
-    LinearAddress4Level stack_frame_addr{0xffffffffffffe000 - stack_size};
+    const int stack_size = 16 * 4096; // 64KiB
+    LinearAddress4Level stack_frame_addr{0xfffffffffffff000 - stack_size};
     if (auto err = SetupPageMaps(stack_frame_addr, stack_size / 4096)) {
         return {0, err};
     }
@@ -610,9 +610,8 @@ WithError<int> Terminal::ExecuteFile(fat::DirectoryEntry& file_entry, char* comm
     // アプリに関連する仮想アドレス範囲は以下のようになる
     // [0xffff 8000 0000 0000, elf_last_addr] : アプリのELF
     // [elf_next_page (dpaging_begin_), dpaging_end_) : アプリのデマンドページング範囲
-    // [dpaging_end_, 0xffff ffff ffff e000) : メモリマップドファイル範囲。メモリを拡大するときは前方に進める。
-    // [0xffff ffff ffff e000, 0xffff ffff ffff f000) : スタック領域
-    // [0xffff ffff ffff f000, ] : コマンドライン引数領域
+    // [dpaging_end_, 0xffff ffff ffff f000) : メモリマップドファイル範囲。メモリを拡大するときは前方に進める。
+    // [0xffff ffff ffff f000, 0xffff ffff ffff ffff] : スタック領域 + コマンドライン引数
     const uint64_t elf_next_page = (app_load.vaddr_end + 4095) & 0xfffffffffffff000; // 4KiB単位のアドレスに切り上げ
     task.SetDPagingBegin(elf_next_page);
     task.SetDPagingEnd(elf_next_page);
