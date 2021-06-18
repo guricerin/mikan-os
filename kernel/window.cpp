@@ -3,6 +3,45 @@
 #include "font.hpp"
 #include "logger.hpp"
 
+namespace {
+    const int kCloseButtonWidth = 16;
+    const int kCloseButtonHeight = 14;
+    const char k_close_button[kCloseButtonHeight][kCloseButtonWidth + 1] = {
+        "...............@",
+        ".:::::::::::::$@",
+        ".:::::::::::::$@",
+        ".:::@@::::@@::$@",
+        ".::::@@::@@:::$@",
+        ".:::::@@@@::::$@",
+        ".::::::@@:::::$@",
+        ".:::::@@@@::::$@",
+        ".::::@@::@@:::$@",
+        ".:::@@::::@@::$@",
+        ".:::::::::::::$@",
+        ".:::::::::::::$@",
+        ".$$$$$$$$$$$$$$@",
+        "@@@@@@@@@@@@@@@@",
+    };
+
+    void DrawTextbox(PixelWriter& writer, Vector2D<int> pos, Vector2D<int> size,
+                     const PixelColor& background,
+                     const PixelColor& border_light,
+                     const PixelColor& border_dark) {
+        auto fill_rect = [&writer](Vector2D<int> pos, Vector2D<int> size, const PixelColor& color) {
+            FillRectangle(writer, pos, size, color);
+        };
+
+        // fill main box
+        fill_rect(pos + Vector2D<int>{1, 1}, size - Vector2D<int>{2, 2}, background);
+
+        // draw border line
+        fill_rect(pos, {size.x, 1}, border_dark);
+        fill_rect(pos, {1, size.y}, border_dark);
+        fill_rect(pos + Vector2D<int>{0, size.y}, {size.x, 1}, border_light);
+        fill_rect(pos + Vector2D<int>{size.x, 0}, {1, size.y}, border_light);
+    }
+} // namespace
+
 Window::Window(int width, int height, PixelFormat shadow_format) : width_{width}, height_{height} {
     data_.resize(height);
     for (int y = 0; y < height; y++) {
@@ -81,6 +120,10 @@ void Window::Move(Vector2D<int> dst_pos, const Rectangle<int>& src) {
     shadow_buffer_.Move(dst_pos, src);
 }
 
+WindowRegion Window::GetWindowRegion(Vector2D<int> pos) {
+    return WindowRegion::kOther;
+}
+
 TopLevelWindow::TopLevelWindow(int width, int height, PixelFormat shadow_format, const std::string& title)
     : Window{width, height, shadow_format}, title_{title} {
     DrawWindow(*Writer(), title_.c_str());
@@ -96,48 +139,21 @@ void TopLevelWindow::Deactivate() {
     DrawWindowTitle(*Writer(), title_.c_str(), false);
 }
 
+WindowRegion TopLevelWindow::GetWindowRegion(Vector2D<int> pos) {
+    if (pos.x < 2 || Width() - 2 <= pos.x || pos.y < 2 || Height() - 2 <= pos.y) {
+        return WindowRegion::kBorder;
+    } else if (pos.y < kTopLeftMargin.y) {
+        if (Width() - 5 - kCloseButtonWidth <= pos.x && pos.x < Width() - 5 && 5 <= pos.y && pos.y < 5 + kTopLeftMargin.y) {
+            return WindowRegion::kCloseButton;
+        }
+        return WindowRegion::kTitleBar;
+    }
+    return WindowRegion::kOther;
+}
+
 Vector2D<int> TopLevelWindow::InnerSize() const {
     return Size() - kTopLeftMargin - kBottomRightMargin;
 }
-
-namespace {
-    const int kCloseButtonWidth = 16;
-    const int kCloseButtonHeight = 14;
-    const char k_close_button[kCloseButtonHeight][kCloseButtonWidth + 1] = {
-        "...............@",
-        ".:::::::::::::$@",
-        ".:::::::::::::$@",
-        ".:::@@::::@@::$@",
-        ".::::@@::@@:::$@",
-        ".:::::@@@@::::$@",
-        ".::::::@@:::::$@",
-        ".:::::@@@@::::$@",
-        ".::::@@::@@:::$@",
-        ".:::@@::::@@::$@",
-        ".:::::::::::::$@",
-        ".:::::::::::::$@",
-        ".$$$$$$$$$$$$$$@",
-        "@@@@@@@@@@@@@@@@",
-    };
-
-    void DrawTextbox(PixelWriter& writer, Vector2D<int> pos, Vector2D<int> size,
-                     const PixelColor& background,
-                     const PixelColor& border_light,
-                     const PixelColor& border_dark) {
-        auto fill_rect = [&writer](Vector2D<int> pos, Vector2D<int> size, const PixelColor& color) {
-            FillRectangle(writer, pos, size, color);
-        };
-
-        // fill main box
-        fill_rect(pos + Vector2D<int>{1, 1}, size - Vector2D<int>{2, 2}, background);
-
-        // draw border line
-        fill_rect(pos, {size.x, 1}, border_dark);
-        fill_rect(pos, {1, size.y}, border_dark);
-        fill_rect(pos + Vector2D<int>{0, size.y}, {size.x, 1}, border_light);
-        fill_rect(pos + Vector2D<int>{size.x, 0}, {1, size.y}, border_light);
-    }
-} // namespace
 
 void DrawWindow(PixelWriter& writer, const char* title) {
     auto fill_rect = [&writer](Vector2D<int> pos, Vector2D<int> size, uint32_t c) {

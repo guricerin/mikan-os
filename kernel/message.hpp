@@ -25,6 +25,7 @@ struct Message {
         kMouseButton,
         kWindowActive,
         kPipe,
+        kWindowClose,
     } type;
 
     /// メッセージ送信元のタスクID
@@ -86,5 +87,10 @@ struct Message {
             char data[16];
             uint8_t len;
         } pipe;
+
+        /// ウィンドウを閉じる
+        struct {
+            unsigned int layer_id;
+        } window_close;
     } arg;
 };

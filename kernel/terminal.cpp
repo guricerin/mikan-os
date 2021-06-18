@@ -813,6 +813,12 @@ void TaskTerminal(uint64_t task_id, int64_t data) {
         case Message::kWindowActive:
             window_isactive = msg->arg.window_active.activate;
             break;
+        case Message::kWindowClose:
+            CloseLayer(msg->arg.window_close.layer_id);
+            __asm__("cli");
+            g_task_manager->Finish(terminal->LastExitCode());
+            __asm__("sti");
+            break;
         default:
             break;
         }

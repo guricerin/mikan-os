@@ -220,23 +220,10 @@ namespace syscall {
     /// 指定レイヤのウィンドウを削除
     SYSCALL(CloseWindow) {
         const unsigned int layer_id = arg1 & 0xffffffff;
-        const auto layer = g_layer_manager->FindLayer(layer_id);
-
-        if (layer == nullptr) {
+        const auto err = CloseLayer(layer_id);
+        if (err.Cause() == Error::kNoSuchEntry) {
             return {EBADF, 0};
         }
-
-        // 削除する前に再描画範囲を取得しておく
-        const auto layer_pos = layer->GetPosition();
-        const auto win_size = layer->GetWindow()->Size();
-
-        __asm__("cli");
-        g_active_layer->Activate(0);
-        g_layer_manager->RemoveLayer(layer_id);
-        g_layer_manager->Draw({layer_pos, win_size});
-        g_layer_task_map->erase(layer_id);
-        __asm__("sti");
-
         return {0, 0};
     }
 
@@ -312,6 +299,10 @@ namespace syscall {
                     app_events[i].arg.timer.value = -msg->arg.timer.value;
                     i++;
                 }
+                break;
+            case Message::kWindowClose:
+                app_events[i].type = AppEvent::kQuit;
+                i++;
                 break;
             default:
                 Log(kInfo, "uncaught event type: %u\n", msg->type);

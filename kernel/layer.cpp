@@ -325,3 +325,22 @@ void ProcessLayerMessage(const Message& msg) {
         exit(1);
     }
 }
+
+Error CloseLayer(unsigned int layer_id) {
+    Layer* layer = g_layer_manager->FindLayer(layer_id);
+    if (layer == nullptr) {
+        return MAKE_ERROR(Error::kNoSuchEntry);
+    }
+
+    const auto pos = layer->GetPosition();
+    const auto size = layer->GetWindow()->Size();
+
+    __asm__("cli");
+    g_active_layer->Activate(0);
+    g_layer_manager->RemoveLayer(layer_id);
+    g_layer_manager->Draw({pos, size});
+    g_layer_task_map->erase(layer_id);
+    __asm__("sti");
+
+    return MAKE_ERROR(Error::kSuccess);
+}

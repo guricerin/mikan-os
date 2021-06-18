@@ -7,6 +7,14 @@
 #include "frame_buffer.hpp"
 #include "graphics.hpp"
 
+/// ウィンドウ領域の種類
+enum class WindowRegion {
+    kTitleBar,
+    kCloseButton,
+    kBorder,
+    kOther,
+};
+
 /// グラフィック（四角形）の表示領域を表す
 /// タイトルやメニューがあるウィンドウだけでなく、マウスカーソルの表示領域なども対象とする
 class Window {
@@ -57,6 +65,9 @@ public:
     virtual void Activate() {}
     virtual void Deactivate() {}
 
+    /// 指定座標がどの領域に属するかを返す
+    virtual WindowRegion GetWindowRegion(Vector2D<int> pos);
+
 private:
     int width_, height_;
     std::vector<std::vector<PixelColor>> data_{};
@@ -98,6 +109,7 @@ public:
     TopLevelWindow(int width, int height, PixelFormat shadow_format, const std::string& title);
     virtual void Activate() override;
     virtual void Deactivate() override;
+    virtual WindowRegion GetWindowRegion(Vector2D<int> pos) override;
 
     InnerAreaWriter* InnerWriter() { return &inner_writer_; }
     Vector2D<int> InnerSize() const;

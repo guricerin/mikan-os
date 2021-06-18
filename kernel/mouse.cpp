@@ -36,16 +36,29 @@ namespace {
         "         @@@   ",
     };
 
-    /// アクティブウィンドウにマウスイベントを送信
-    void SendMouseMessage(Vector2D<int> newpos, Vector2D<int> posdiff, uint8_t buttons, uint8_t previous_buttons) {
+    /// 現在アクティブ状態のレイヤとそれに紐づくタスクIDを返す
+    std::tuple<Layer*, uint64_t> FindActiveLayerTask() {
         const auto act = g_active_layer->GetActive();
         if (!act) {
-            return;
+            return {nullptr, 0};
         }
 
         const auto layer = g_layer_manager->FindLayer(act);
+        if (!layer) {
+            return {nullptr, 0};
+        }
+
         const auto task_it = g_layer_task_map->find(act);
         if (task_it == g_layer_task_map->end()) {
+            return {nullptr, 0};
+        }
+        return {layer, task_it->second};
+    }
+
+    /// アクティブウィンドウにマウスイベントを送信
+    void SendMouseMessage(Vector2D<int> newpos, Vector2D<int> posdiff, uint8_t buttons, uint8_t previous_buttons) {
+        const auto [layer, task_id] = FindActiveLayerTask();
+        if (!layer || !task_id) {
             return;
         }
 
@@ -60,7 +73,7 @@ namespace {
             msg.arg.mouse_move.dx = posdiff.x;
             msg.arg.mouse_move.dy = posdiff.y;
             msg.arg.mouse_move.buttons = buttons;
-            g_task_manager->SendMessage(task_it->second, msg);
+            g_task_manager->SendMessage(task_id, msg);
         }
 
         if (previous_buttons != buttons) {
@@ -73,10 +86,21 @@ namespace {
                     msg.arg.mouse_button.y = relpos.y;
                     msg.arg.mouse_button.press = (buttons >> i) & 1;
                     msg.arg.mouse_button.button = i;
-                    g_task_manager->SendMessage(task_it->second, msg);
+                    g_task_manager->SendMessage(task_id, msg);
                 }
             }
         }
+    }
+
+    void SendCloseMessage() {
+        const auto [layer, task_id] = FindActiveLayerTask();
+        if (!layer || !task_id) {
+            return;
+        }
+
+        Message msg{Message::kWindowClose};
+        msg.arg.window_close.layer_id = layer->ID();
+        g_task_manager->SendMessage(task_id, msg);
     }
 } // namespace
 
@@ -107,15 +131,22 @@ void Mouse::OnInterrupt(uint8_t buttons, int8_t displacement_x, int8_t displacem
     const auto pos_diff = position_ - old_pos;
     g_layer_manager->Move(layer_id_, position_);
 
+    unsigned int close_layer_id = 0;
     const bool previous_left_pressed = (previous_buttons_ & 0x01);
     const bool left_pressed = (buttons & 0x01);
     if (!previous_left_pressed && left_pressed) { // 左クリック
         auto layer = g_layer_manager->FindLayerByPosition(position_, layer_id_);
         if (layer && layer->IsDraggable()) { // ウィンドウクリック
-            const auto y_layer = position_.y - layer->GetPosition().y;
-            // タイトルバーをクリックしたとき（y座標が[0, TopLevelWindow::kTopLeftMargin.y)の範囲）にドラッグ状態にする
-            if (y_layer < TopLevelWindow::kTopLeftMargin.y) {
+            const auto pos_layer = position_ - layer->GetPosition();
+            switch (layer->GetWindow()->GetWindowRegion(pos_layer)) {
+            case WindowRegion::kTitleBar:
                 drag_layer_id_ = layer->ID();
+                break;
+            case WindowRegion::kCloseButton:
+                close_layer_id = layer->ID();
+                break;
+            default:
+                break;
             }
             g_active_layer->Activate(layer->ID());
         } else {
@@ -131,7 +162,11 @@ void Mouse::OnInterrupt(uint8_t buttons, int8_t displacement_x, int8_t displacem
 
     // ウィンドウをドラッグ中（ウィンドウ内でのマウス座標は変化していない）の場合はメッセージを送信しない
     if (drag_layer_id_ == 0) {
-        SendMouseMessage(new_pos, pos_diff, buttons, previous_buttons_);
+        if (close_layer_id == 0) {
+            SendMouseMessage(new_pos, pos_diff, buttons, previous_buttons_);
+        } else { // クローズボタンをクリック
+            SendCloseMessage();
+        }
     }
 
     previous_buttons_ = buttons;
